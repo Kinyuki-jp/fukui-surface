@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>福井サーフェイス | FUKUI SURFACE</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a0a1a; font-family: 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', sans-serif; color: white; touch-action: none; }
+  #gameContainer { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; background: linear-gradient(180deg, #ff9a8b 0%, #ffc3a0 40%, #ffd1d1 60%, #4a3a5a 70%, #1a1a2a 100%); }
+  #ui { position: absolute; top: 16px; left: 16px; z-index: 10; font-weight: 700; text-shadow: 2px 2px 6px rgba(0,0,0,0.6); }
+  #ui .score { font-size: 28px; letter-spacing: 1px; }
+  #ui .lenses { font-size: 18px; opacity: 0.95; margin-top: 4px; }
+  #title { position: absolute; top: 16px; right: 16px; z-index: 10; text-align: right; text-shadow: 2px 2px 6px rgba(0,0,0,0.6); }
+  #title .jp { font-size: 18px; font-weight: 700; }
+  #title .en { font-size: 11px; opacity: 0.8; letter-spacing: 3px; }
+  #controls { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 10; font-size: 12px; opacity: 0.6; text-align: center; text-shadow: 1px 1px 2px rgba(0,0,0,0.7); }
+  #overlay { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(20,10,30,0.92), rgba(60,20,40,0.92)); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; padding: 20px; backdrop-filter: blur(6px); }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: clamp(40px, 9vw, 80px); margin-bottom: 8px; background: linear-gradient(45deg, #ff6b9d, #ffd93d, #ff9a8b); -webkit-background-clip: text; background-clip: text; color: transparent; letter-spacing: 4px; font-weight: 900; }
+  #overlay .en { font-size: clamp(14px, 3vw, 22px); letter-spacing: 8px; opacity: 0.7; margin-bottom: 32px; }
+  #overlay p { font-size: clamp(13px, 2.5vw, 16px); margin-bottom: 8px; opacity: 0.9; max-width: 90%; }
+  #overlay .tagline { font-size: clamp(15px, 3vw, 18px); margin: 20px 0; opacity: 1; color: #ffd93d; }
+  #overlay button { margin-top: 30px; padding: 16px 56px; font-size: 18px; background: linear-gradient(45deg, #ff6b9d, #c44569); color: white; border: none; border-radius: 40px; cursor: pointer; font-weight: 800; letter-spacing: 3px; box-shadow: 0 8px 24px rgba(196, 69, 105, 0.5); transition: transform 0.15s; }
+  #overlay button:hover, #overlay button:active { transform: scale(1.06); }
+  #overlay .footer { position: absolute; bottom: 20px; font-size: 11px; opacity: 0.5; letter-spacing: 2px; }
+  .sakura-petal { position: absolute; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="game"></canvas>
+  <div id="ui">
+    <div class="score">SCORE <span id="score">0</span></div>
+    <div class="lenses">👓 LENSES <span id="lenses">0</span></div>
+  </div>
+  <div id="title">
+    <div class="jp">福井サーフェイス</div>
+    <div class="en">F U K U I  S U R F A C E</div>
+  </div>
+  <div id="controls">← → 左右移動  /  SPACE ジャンプ  /  スワイプ対応</div>
+  <div id="overlay">
+    <h1>福井サーフェイス</h1>
+    <div class="en">F U K U I   S U R F A C E</div>
+    <p>眼鏡の聖地・鯖江を駆け抜けろ</p>
+    <p>👓 眼鏡レンズを集めて、街を制覇しよう</p>
+    <div class="tagline">Made in Sabae × Made for the World</div>
+    <p style="font-size:12px;opacity:0.7;">← → キー / スワイプ で移動 ・ SPACE / 上スワイプ でジャンプ</p>
+    <button id="startBtn">START</button>
+    <div class="footer">FUKUI CYBERIZATION PROJECT</div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const scoreEl = document.getElementById('score');
+const lensesEl = document.getElementById('lenses');
+
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+window.addEventListener('resize', () => { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; });
+
+const LANE_W = () => Math.min(140, W * 0.18);
+const GROUND_Y = () => H * 0.72;
+const HORIZON_Y = () => H * 0.45;
+
+let player, game;
+
+function reset() {
+  player = { lane: 1, y: 0, vy: 0, jumping: false, sliding: false, slideTimer: 0 };
+  game = {
+    running: false, speed: 9, distance: 0, score: 0, lenses: 0,
+    obstacles: [], collectibles: [], buildings: [], petals: [], clouds: [],
+    spawnTimer: 0, buildingTimer: 0, petalTimer: 0,
+    stage: 'station', stageDistance: 0,
+  };
+  for (let i = 0; i < 8; i++) {
+    game.petals.push({ x: Math.random() * W, y: Math.random() * H, vx: -0.5 - Math.random(), vy: 1 + Math.random(), rot: Math.random() * Math.PI * 2, size: 6 + Math.random() * 8 });
+  }
+  for (let i = 0; i < 5; i++) {
+    game.clouds.push({ x: Math.random() * W, y: 50 + Math.random() * 100, w: 80 + Math.random() * 100, speed: 0.3 + Math.random() * 0.5 });
+  }
+}
+reset();
+
+// === INPUT ===
+document.addEventListener('keydown', (e) => {
+  if (!game.running) {
+    if (e.key === 'Enter' || e.key === ' ') startGame();
+    return;
+  }
+  if (e.key === 'ArrowLeft' && player.lane > 0) player.lane--;
+  if (e.key === 'ArrowRight' && player.lane < 2) player.lane++;
+  if ((e.key === ' ' || e.key === 'ArrowUp') && !player.jumping && !player.sliding) {
+    player.jumping = true; player.vy = -17;
+  }
+  if (e.key === 'ArrowDown' && !player.sliding && !player.jumping) {
+    player.sliding = true; player.slideTimer = 40;
+  }
+});
+
+let touchStart = null;
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, { passive: false });
+canvas.addEventListener('touchend', (e) => {
+  if (!game.running || !touchStart) return;
+  const dx = e.changedTouches[0].clientX - touchStart.x;
+  const dy = e.changedTouches[0].clientY - touchStart.y;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 25) {
+    if (dx > 0 && player.lane < 2) player.lane++;
+    if (dx < 0 && player.lane > 0) player.lane--;
+  } else if (Math.abs(dy) > 25) {
+    if (dy < 0 && !player.jumping && !player.sliding) { player.jumping = true; player.vy = -17; }
+    if (dy > 0 && !player.sliding && !player.jumping) { player.sliding = true; player.slideTimer = 40; }
+  }
+  touchStart = null;
+});
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+function startGame() { reset(); game.running = true; overlay.classList.add('hidden'); }
+
+function gameOver() {
+  game.running = false;
+  const msg = [
+    '鯖江は世界の眼鏡の95%を作る街',
+    '北陸新幹線で福井へ行こう',
+    '西山公園のレッサーパンダが待ってる',
+    'Made in Sabae は世界ブランド',
+    '橋本左内、紫式部、継体天皇の故郷',
+  ][Math.floor(Math.random() * 5)];
+  overlay.innerHTML = `
+    <h1 style="background: linear-gradient(45deg, #ff6b9d, #ff3838); -webkit-background-clip: text; background-clip: text; color: transparent;">GAME OVER</h1>
+    <div class="en">G A M E   O V E R</div>
+    <p style="font-size: 36px; margin: 30px 0 10px; color: #ffd93d;">SCORE  ${game.score}</p>
+    <p style="font-size: 20px;">👓 集めたレンズ  ${game.lenses} 個</p>
+    <div class="tagline">"${msg}"</div>
+    <button onclick="startGame()">RESTART</button>
+    <div class="footer">FUKUI CYBERIZATION PROJECT</div>
+  `;
+  overlay.classList.remove('hidden');
+}
+window.startGame = startGame;
+
+// === GAME LOGIC ===
+function spawnObstacle() {
+  const lane = Math.floor(Math.random() * 3);
+  const types = ['cone', 'box', 'barrier'];
+  game.obstacles.push({ lane, z: 1200, type: types[Math.floor(Math.random() * types.length)] });
+}
+function spawnCollectibleRow() {
+  const lane = Math.floor(Math.random() * 3);
+  const count = 3 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < count; i++) game.collectibles.push({ lane, z: 1200 + i * 70, collected: false });
+}
+function spawnBuilding() {
+  const side = Math.random() > 0.5 ? -1 : 1;
+  const colors = ['#f4a4a4', '#c4d4f4', '#f4d4a4', '#d4c4e4', '#f4b4c4', '#a4d4c4'];
+  game.buildings.push({ side, z: 1500, height: 250 + Math.random() * 300, width: 120 + Math.random() * 80, color: colors[Math.floor(Math.random() * colors.length)] });
+}
+
+function project(z) { return Math.max(0.05, 600 / (z + 500)); }
+
+function update(dt) {
+  if (!game.running) return;
+  game.distance += game.speed;
+  game.stageDistance += game.speed;
+  game.score = Math.floor(game.distance / 8);
+  game.speed = 9 + game.score / 250;
+
+  if (game.stageDistance > 3000) {
+    game.stageDistance = 0;
+    const stages = ['station', 'shotengai', 'park', 'workshop', 'festival'];
+    game.stage = stages[Math.floor(Math.random() * stages.length)];
+  }
+
+  if (player.jumping) {
+    player.y += player.vy; player.vy += 0.9;
+    if (player.y >= 0) { player.y = 0; player.vy = 0; player.jumping = false; }
+  }
+  if (player.sliding) { player.slideTimer--; if (player.slideTimer <= 0) player.sliding = false; }
+
+  game.spawnTimer += dt;
+  const spawnRate = Math.max(300, 800 - game.score / 5);
+  if (game.spawnTimer > spawnRate) {
+    game.spawnTimer = 0;
+    if (Math.random() > 0.45) spawnObstacle();
+    if (Math.random() > 0.55) spawnCollectibleRow();
+  }
+  game.buildingTimer += dt;
+  if (game.buildingTimer > 400) { game.buildingTimer = 0; spawnBuilding(); }
+
+  game.obstacles.forEach(o => o.z -= game.speed);
+  game.collectibles.forEach(c => c.z -= game.speed);
+  game.buildings.forEach(b => b.z -= game.speed * 0.9);
+  game.obstacles = game.obstacles.filter(o => o.z > -100);
+  game.collectibles = game.collectibles.filter(c => c.z > -100 && !c.collected);
+  game.buildings = game.buildings.filter(b => b.z > -200);
+
+  game.petals.forEach(p => { p.x += p.vx - game.speed * 0.15; p.y += p.vy; p.rot += 0.03;
+    if (p.y > H || p.x < -20) { p.x = W + 20; p.y = -20 - Math.random() * 100; }
+  });
+  game.clouds.forEach(c => { c.x -= c.speed; if (c.x < -200) { c.x = W + 200; c.y = 50 + Math.random() * 100; } });
+
+  game.obstacles.forEach(o => {
+    if (o.z < 60 && o.z > -30 && o.lane === player.lane) {
+      if (o.type === 'barrier' && !player.sliding) gameOver();
+      else if (o.type !== 'barrier' && player.y > -50) gameOver();
+    }
+  });
+  game.collectibles.forEach(c => {
+    if (c.z < 50 && c.z > -20 && c.lane === player.lane && !c.collected) {
+      const heightOK = !c.high || player.y < -30;
+      if (heightOK) { c.collected = true; game.lenses++; game.score += 25; }
+    }
+  });
+
+  scoreEl.textContent = game.score;
+  lensesEl.textContent = game.lenses;
+}
+
+// === DRAW ===
+function drawSky() {
+  const t = (game.distance / 10000) % 1;
+  const g = ctx.createLinearGradient(0, 0, 0, GROUND_Y());
+  g.addColorStop(0, '#ff9a8b'); g.addColorStop(0.4, '#ffc3a0'); g.addColorStop(0.75, '#ffd1d1'); g.addColorStop(1, '#e8a5a5');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, GROUND_Y());
+
+  // Sun
+  ctx.fillStyle = 'rgba(255, 220, 120, 0.7)';
+  ctx.beginPath(); ctx.arc(W * 0.75, HORIZON_Y() - 40, 50, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255, 220, 120, 0.25)';
+  ctx.beginPath(); ctx.arc(W * 0.75, HORIZON_Y() - 40, 90, 0, Math.PI * 2); ctx.fill();
+
+  // Clouds
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  game.clouds.forEach(c => {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.w * 0.3, 0, Math.PI * 2);
+    ctx.arc(c.x + c.w * 0.4, c.y - 10, c.w * 0.35, 0, Math.PI * 2);
+    ctx.arc(c.x + c.w * 0.8, c.y, c.w * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Mountains (far)
+  ctx.fillStyle = '#7a5f7a';
+  ctx.beginPath(); ctx.moveTo(0, GROUND_Y());
+  for (let i = 0; i <= W; i += 30) ctx.lineTo(i, GROUND_Y() - 80 - Math.sin(i * 0.008) * 40 - Math.sin(i * 0.025) * 20);
+  ctx.lineTo(W, GROUND_Y()); ctx.fill();
+
+  // Mountains (near)
+  ctx.fillStyle = '#5a3f5a';
+  ctx.beginPath(); ctx.moveTo(0, GROUND_Y());
+  for (let i = 0; i <= W; i += 30) ctx.lineTo(i, GROUND_Y() - 50 - Math.sin(i * 0.015 + 1) * 30);
+  ctx.lineTo(W, GROUND_Y()); ctx.fill();
+}
+
+function drawGround() {
+  const g = ctx.createLinearGradient(0, GROUND_Y(), 0, H);
+  g.addColorStop(0, '#4a3a4a'); g.addColorStop(1, '#1a1525');
+  ctx.fillStyle = g; ctx.fillRect(0, GROUND_Y(), W, H - GROUND_Y());
+
+  // Lane lines (perspective)
+  const lw = LANE_W();
+  ctx.strokeStyle = 'rgba(255, 235, 200, 0.4)';
+  ctx.lineWidth = 3;
+  for (let lane = -1; lane <= 2; lane++) {
+    const xBottom = W/2 + (lane - 0.5) * lw;
+    const xTop = W/2 + (lane - 0.5) * 15;
+    ctx.beginPath(); ctx.moveTo(xBottom, H); ctx.lineTo(xTop, GROUND_Y()); ctx.stroke();
+  }
+  // Dashed center
+  ctx.setLineDash([25, 30]); ctx.lineDashOffset = -game.distance * 0.6;
+  ctx.strokeStyle = 'rgba(255, 235, 150, 0.6)';
+  for (let lane = 0; lane <= 1; lane++) {
+    const xBottom = W/2 + (lane - 0.5) * lw;
+    const xTop = W/2 + (lane - 0.5) * 15;
+    ctx.beginPath(); ctx.moveTo(xBottom, H); ctx.lineTo(xTop, GROUND_Y()); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+}
+
+function drawBuildings() {
+  // Sort back to front
+  const sorted = [...game.buildings].sort((a, b) => b.z - a.z);
+  sorted.forEach(b => {
+    const scale = project(b.z);
+    if (scale < 0.05) return;
+    const sideOffset = b.side * (W/2 + lerp(50, 300, scale));
+    const x = W/2 + sideOffset * scale * 1.2;
+    const groundY = HORIZON_Y() + (GROUND_Y() - HORIZON_Y()) * (1 - Math.min(1, b.z / 500));
+    const groundOnScreen = lerp(GROUND_Y(), HORIZON_Y() + 20, Math.min(1, b.z / 1500));
+    const w = b.width * scale;
+    const h = b.height * scale;
+    ctx.fillStyle = b.color;
+    ctx.fillRect(x - w/2, groundOnScreen - h, w, h);
+
+    // Roof shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(x - w/2, groundOnScreen - h, w, 6 * scale);
+    // Windows
+    ctx.fillStyle = 'rgba(255, 220, 100, 0.75)';
+    const winW = 12 * scale, winH = 18 * scale, gap = 8 * scale;
+    for (let wy = 25 * scale; wy < h - 25 * scale; wy += winH + gap) {
+      for (let wx = 12 * scale; wx < w - 24 * scale; wx += winW + gap) {
+        ctx.fillRect(x - w/2 + wx, groundOnScreen - h + wy, winW, winH);
+      }
+    }
+    // Side shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(x - w/2, groundOnScreen - h, 4 * scale, h);
+  });
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function drawObstacle(o) {
+  const scale = project(o.z);
+  if (scale < 0.04) return;
+  const laneX = (o.lane - 1) * LANE_W();
+  const x = W/2 + laneX * (scale / project(0));
+  const groundOnScreen = lerp(HORIZON_Y(), GROUND_Y(), Math.min(1, (1 - o.z/1200)));
+
+  if (o.type === 'cone') {
+    ctx.fillStyle = '#ff6b35';
+    ctx.beginPath();
+    ctx.moveTo(x, groundOnScreen - 65 * scale);
+    ctx.lineTo(x - 28 * scale, groundOnScreen);
+    ctx.lineTo(x + 28 * scale, groundOnScreen);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillRect(x - 22 * scale, groundOnScreen - 32 * scale, 44 * scale, 9 * scale);
+  } else if (o.type === 'box') {
+    ctx.fillStyle = '#8b5a3c'; ctx.fillRect(x - 32 * scale, groundOnScreen - 55 * scale, 64 * scale, 55 * scale);
+    ctx.strokeStyle = '#5a3a1c'; ctx.lineWidth = 2 * scale;
+    ctx.strokeRect(x - 32 * scale, groundOnScreen - 55 * scale, 64 * scale, 55 * scale);
+    ctx.beginPath();
+    ctx.moveTo(x - 32 * scale, groundOnScreen - 27 * scale);
+    ctx.lineTo(x + 32 * scale, groundOnScreen - 27 * scale); ctx.stroke();
+  } else if (o.type === 'barrier') {
+    ctx.fillStyle = '#e63946'; ctx.fillRect(x - 38 * scale, groundOnScreen - 100 * scale, 76 * scale, 14 * scale);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x - 38 * scale, groundOnScreen - 100 * scale, 6 * scale, 100 * scale);
+    ctx.fillRect(x + 32 * scale, groundOnScreen - 100 * scale, 6 * scale, 100 * scale);
+    ctx.fillStyle = 'white'; ctx.font = `bold ${14 * scale}px sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText('SLIDE', x, groundOnScreen - 90 * scale);
+  }
+}
+
+function drawCollectible(c) {
+  const scale = project(c.z);
+  if (scale < 0.04) return;
+  const laneX = (c.lane - 1) * LANE_W();
+  const x = W/2 + laneX * (scale / project(0));
+  const groundOnScreen = lerp(HORIZON_Y(), GROUND_Y(), Math.min(1, (1 - c.z/1200)));
+  const y = groundOnScreen - 60 * scale - Math.sin(game.distance * 0.02 + c.z * 0.01) * 5 * scale;
+
+  // Eyewear icon
+  ctx.shadowColor = 'rgba(255, 215, 0, 0.7)'; ctx.shadowBlur = 20 * scale;
+  ctx.strokeStyle = '#ffd700'; ctx.fillStyle = 'rgba(255, 215, 0, 0.25)';
+  ctx.lineWidth = 3 * scale;
+  ctx.beginPath(); ctx.arc(x - 11 * scale, y, 9 * scale, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x + 11 * scale, y, 9 * scale, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 2 * scale, y); ctx.lineTo(x + 2 * scale, y); ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function drawPlayer() {
+  const x = W/2 + (player.lane - 1) * LANE_W();
+  const y = GROUND_Y() + player.y;
+  const slideMod = player.sliding ? 0.6 : 1;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.ellipse(x, GROUND_Y(), 30, 9, 0, 0, Math.PI * 2); ctx.fill();
+
+  // Legs (running)
+  const runCycle = Math.sin(game.distance * 0.05) * 10;
+  ctx.fillStyle = '#1a2a4e';
+  if (!player.sliding) {
+    ctx.fillRect(x - 14, y - 18, 11, 18 + runCycle * 0.5);
+    ctx.fillRect(x + 3, y - 18, 11, 18 - runCycle * 0.5);
+    // Shoes
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - 16, y - 4 + runCycle * 0.5, 14, 6);
+    ctx.fillRect(x + 2, y - 4 - runCycle * 0.5, 14, 6);
+  }
+
+  // Body
+  const bodyH = 55 * slideMod;
+  ctx.fillStyle = '#4a90e2';
+  ctx.fillRect(x - 20, y - 18 - bodyH, 40, bodyH);
+  ctx.fillStyle = '#3a7ac2';
+  ctx.fillRect(x - 20, y - 18 - bodyH, 40, 6);
+
+  // Arms (swinging)
+  ctx.fillStyle = '#ffd1a4';
+  ctx.save();
+  ctx.translate(x - 20, y - 18 - bodyH + 8);
+  ctx.rotate(runCycle * 0.03);
+  ctx.fillRect(-6, 0, 8, 22 * slideMod);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(x + 20, y - 18 - bodyH + 8);
+  ctx.rotate(-runCycle * 0.03);
+  ctx.fillRect(-2, 0, 8, 22 * slideMod);
+  ctx.restore();
+
+  // Head
+  ctx.fillStyle = '#ffd1a4';
+  ctx.beginPath(); ctx.arc(x, y - 30 - bodyH, 19, 0, Math.PI * 2); ctx.fill();
+
+  // Hair (Japanese student look)
+  ctx.fillStyle = '#1a1010';
+  ctx.beginPath(); ctx.arc(x, y - 38 - bodyH, 18, Math.PI * 1.1, Math.PI * 1.9); ctx.fill();
+  ctx.fillRect(x - 17, y - 40 - bodyH, 5, 12);
+  ctx.fillRect(x + 12, y - 40 - bodyH, 5, 12);
+
+  // SABAE GLASSES! (the hero of the story)
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2.5;
+  ctx.fillStyle = 'rgba(150, 200, 255, 0.4)';
+  ctx.beginPath(); ctx.arc(x - 8, y - 30 - bodyH, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x + 8, y - 30 - bodyH, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 1, y - 30 - bodyH); ctx.lineTo(x + 1, y - 30 - bodyH); ctx.stroke();
+
+  // Mouth (concentration)
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(x - 3, y - 22 - bodyH, 6, 1.5);
+}
+
+function drawPetals() {
+  game.petals.forEach(p => {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.fillStyle = 'rgba(255, 182, 193, 0.85)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, p.size, p.size * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255, 105, 180, 0.4)';
+    ctx.beginPath(); ctx.arc(-p.size * 0.3, 0, p.size * 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawStageIndicator() {
+  const stageNames = {
+    station: '🚉 鯖江駅前  SABAE STATION',
+    shotengai: '🏮 商店街  SHOTENGAI',
+    park: '🌸 西山公園  NISHIYAMA PARK',
+    workshop: '👓 メガネ工房  EYEWEAR WORKSHOP',
+    festival: '🎌 福井祭り  FUKUI FESTIVAL',
+  };
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(W/2 - 140, H - 60, 280, 32);
+  ctx.fillStyle = '#ffd93d'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(stageNames[game.stage] || '', W/2, H - 40);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawSky();
+  drawBuildings();
+  drawGround();
+
+  // Render obstacles + collectibles by z (back to front)
+  const items = [];
+  game.obstacles.forEach(o => items.push({ z: o.z, type: 'obs', data: o }));
+  game.collectibles.forEach(c => items.push({ z: c.z, type: 'col', data: c }));
+  items.sort((a, b) => b.z - a.z);
+  items.forEach(i => { if (i.type === 'obs') drawObstacle(i.data); else drawCollectible(i.data); });
+
+  drawPlayer();
+  drawPetals();
+  if (game.running) drawStageIndicator();
+}
+
+let lastTime = 0;
+function loop(time) {
+  const dt = Math.min(50, time - lastTime); lastTime = time;
+  if (game.running) update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
