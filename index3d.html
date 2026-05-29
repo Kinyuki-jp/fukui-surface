@@ -82,6 +82,10 @@ canvas{display:block}
   font-size:12px;margin-top:6px;letter-spacing:2px;
   color:#aaff00;text-shadow:0 0 8px #aaff00;
 }
+#gsub{
+  font-size:8px;letter-spacing:1.5px;margin-top:2px;
+  color:rgba(0,255,255,.45);text-align:right;
+}
 
 /* ── DANGER BAR (top) ──────────────── */
 #dangerbar{
@@ -296,6 +300,7 @@ body.camshake{animation:camshake .12s linear infinite}
   </div>
   <div id="rhud">
     <div id="gtitle">FUKUI SURFACE</div>
+    <div id="gsub">恐竜王国 × 鯖江の眼鏡</div>
     <div id="spd">SPD 019</div>
   </div>
 </div>
@@ -408,8 +413,16 @@ function applyStage(st){
   trackMat.color.setHex(st.track);
   wallMat.color.setHex(st.wall);
   bldMat.color.setHex(st.bld);
-  if(st.jungle){ sun.color.setHex(0xffe090); hemi.color.setHex(0x60ff40); }
-  else         { sun.color.setHex(0xaaccff); hemi.color.setHex(0x4488ff); }
+  if(st.jungle){
+    sun.color.setHex(0xffe090); hemi.color.setHex(0x60ff40);
+    // Fossil/bone obstacle colors for dino stage
+    M.obsRed.color.setHex(0xc8b284);
+    M.obsOrange.color.setHex(0xa89060);
+  } else {
+    sun.color.setHex(0xaaccff); hemi.color.setHex(0x4488ff);
+    M.obsRed.color.setHex(0xff2222);
+    M.obsOrange.color.setHex(0xff7700);
+  }
   const go=document.getElementById('gridoverlay');
   if(go) go.classList.toggle('on',!st.jungle);
 }
@@ -453,151 +466,109 @@ function buildPlayer(){
 // ═══════════════════════════════════════════
 //  T-REX  (procedural 3D + image overlay)
 // ═══════════════════════════════════════════
-let trexGroup=null, trexBillboard=null;
-let trexLegL,trexLegR,trexLegT=0;
+// ── T-Rex: photo billboard + ground shadow (no box-model)
+let trexGroup=null, trexBillboard=null, trexShadow=null;
+let trexLegL,trexLegR,trexLegT=0; // trexLegL/R unused, kept for compat
 let trexGap=TREX_START_GAP;
 
 function buildTrex(){
-  if(trexGroup) scene.remove(trexGroup);
+  if(trexBillboard){scene.remove(trexBillboard);trexBillboard=null;}
+  if(trexShadow)   {scene.remove(trexShadow);   trexShadow=null;}
+  if(trexGroup)    {scene.remove(trexGroup);     trexGroup=null;}
 
+  // Empty group for position reference
   trexGroup=new THREE.Group();
-  const bM =new THREE.MeshLambertMaterial({color:0x7a5818});
-  const dM =new THREE.MeshLambertMaterial({color:0x4a3008});
-  const beM=new THREE.MeshLambertMaterial({color:0xb88838});
-  const eM =new THREE.MeshLambertMaterial({color:0xddee00,emissive:0x555500});
-  const tM =new THREE.MeshLambertMaterial({color:0xf8f0d0});
-  const mM =new THREE.MeshLambertMaterial({color:0xbb2218});
-
-  const add=(geo,mat,x,y,z,rx,ry,rz)=>{
-    const m=new THREE.Mesh(geo,mat);
-    m.position.set(x,y,z);
-    if(rx!==undefined) m.rotation.set(rx,ry||0,rz||0);
-    m.castShadow=true; trexGroup.add(m); return m;
-  };
-
-  // Body
-  add(new THREE.BoxGeometry(3.0,2.4,4.2),bM,0,4.2,0,-0.28);
-  add(new THREE.BoxGeometry(2.4,1.6,3.8),beM,0,3.5,.2,-0.28);
-  // Neck
-  add(new THREE.BoxGeometry(1.7,2.0,1.6),bM,0,5.4,1.8,-0.35);
-  // Head
-  add(new THREE.BoxGeometry(2.2,1.7,3.0),bM,0,6.6,3.4);
-  add(new THREE.BoxGeometry(1.9,.65,2.6),bM,0,5.7,3.5,0.12);
-  add(new THREE.BoxGeometry(1.6,.4,2.8), dM,0,6.1,3.6);
-  add(new THREE.BoxGeometry(1.5,.6,2.4),mM,0,5.95,3.4); // throat
-  // Teeth
-  for(let t=0;t<5;t++) add(new THREE.BoxGeometry(.14,.45,.14),tM,(t-2)*.42,6.0,4.7);
-  for(let t=0;t<4;t++) add(new THREE.BoxGeometry(.13,.38,.13),tM,(t-1.5)*.44,5.7,4.65);
-  // Eyes
-  add(new THREE.SphereGeometry(.32,10,10),eM,-.72,7.05,3.7);
-  add(new THREE.SphereGeometry(.32,10,10),eM, .72,7.05,3.7);
-  add(new THREE.SphereGeometry(.18,8,8), dM,-.70,7.05,4.0);
-  add(new THREE.SphereGeometry(.18,8,8), dM, .70,7.05,4.0);
-  add(new THREE.BoxGeometry(.5,.25,.7),  dM,-.7,7.45,3.5);
-  add(new THREE.BoxGeometry(.5,.25,.7),  dM, .7,7.45,3.5);
-  // Tail
-  add(new THREE.BoxGeometry(2.2,1.8,3.8),bM,0,4.5,-2.5, .22);
-  add(new THREE.BoxGeometry(1.6,1.3,3.2),bM,0,3.8,-5.5, .38);
-  add(new THREE.BoxGeometry(1.0,.9,3.0), bM,0,2.9,-8.2, .48);
-  add(new THREE.BoxGeometry(.5,.5,2.0),  dM,0,2.0,-10.5,.45);
-  // Arms
-  add(new THREE.BoxGeometry(.55,1.1,.55),bM,-1.4,5.1,1.6,0,0,.7);
-  add(new THREE.BoxGeometry(.55,1.1,.55),bM, 1.4,5.1,1.6,0,0,-.7);
-  add(new THREE.BoxGeometry(.5,.7,.5),   dM,-1.9,4.55,1.9,0,0,.6);
-  add(new THREE.BoxGeometry(.5,.7,.5),   dM, 1.9,4.55,1.9,0,0,-.6);
-  // Thighs
-  add(new THREE.BoxGeometry(1.25,2.8,1.25),bM,-1.2,2.8,.4);
-  add(new THREE.BoxGeometry(1.25,2.8,1.25),bM, 1.2,2.8,.4);
-  // Lower legs (animated)
-  trexLegL=add(new THREE.BoxGeometry(1.0,2.4,1.0),dM,-1.2,.8,.7);
-  trexLegR=add(new THREE.BoxGeometry(1.0,2.4,1.0),dM, 1.2,.8,.7);
-  // Feet
-  add(new THREE.BoxGeometry(1.3,.55,2.2),dM,-1.2,-.3,1.3);
-  add(new THREE.BoxGeometry(1.3,.55,2.2),dM, 1.2,-.3,1.3);
-  // Dorsal
-  const sM=new THREE.MeshLambertMaterial({color:0x382008});
-  for(let s=0;s<7;s++){
-    const sh=.4+s*.12;
-    add(new THREE.BoxGeometry(.28,sh,.28),sM,0,5.6+sh/2,-s*.7,-0.28-s*.04);
-  }
-  trexGroup.scale.set(1.5,1.5,1.5);
   scene.add(trexGroup);
 
-  // ── Image billboard (Three.js PlaneGeometry with photo texture)
-  if(trexBillboard) scene.remove(trexBillboard);
+  // Ground shadow (ellipse under billboard)
+  trexShadow=new THREE.Mesh(
+    new THREE.CircleGeometry(3.5,20),
+    new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.42,depthWrite:false})
+  );
+  trexShadow.rotation.x=-Math.PI/2;
+  trexShadow.position.y=.04;
+  scene.add(trexShadow);
+
+  // Photo billboard — tall, upright, ground-level
   const tex=new THREE.TextureLoader().load('assets/trex.jpg',
-    undefined,undefined,()=>{ if(trexBillboard) trexBillboard.visible=false; }
+    undefined,undefined,()=>{if(trexBillboard)trexBillboard.visible=false;}
   );
   trexBillboard=new THREE.Mesh(
-    new THREE.PlaneGeometry(22,30),
-    new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,side:THREE.DoubleSide})
+    new THREE.PlaneGeometry(22,32),
+    new THREE.MeshBasicMaterial({map:tex,transparent:false,depthWrite:false,side:THREE.FrontSide})
   );
-  trexBillboard.renderOrder=1;
+  trexBillboard.renderOrder=2;
   scene.add(trexBillboard);
 }
 
 function updateTrex(dt, move){
-  if(!trexGroup||!running) return;
+  if(!running) return;
 
-  // Close the gap
+  // ── Close the gap
   trexGap-=move*TREX_GAIN_RATE;
   trexGap=Math.max(trexGap,2.0);
+  trexLegT+=dt*5;
 
   const trexZ=pz-trexGap;
-  trexGroup.position.set(px*.15,0,trexZ);
-  trexGroup.rotation.y=Math.PI;
+  const bx=px*0.24; // billboard tracks player slightly
 
-  // Leg anim
-  trexLegT+=dt*4.8;
-  if(trexLegL){
-    trexLegL.rotation.x= Math.sin(trexLegT)*.55;
-    trexLegR.rotation.x=-Math.sin(trexLegT)*.55;
-  }
-  trexGroup.position.y=Math.abs(Math.sin(trexLegT*.5))*.3;
-
-  // Billboard: always face camera, float above T-Rex
+  // ── 3D Photo billboard: always in front of camera, looms as raptor closes
+  // Camera is at pz-20. Billboard at pz-17 keeps it just in view behind player.
+  // Scale represents distance instead of Z position.
   if(trexBillboard){
-    trexBillboard.position.set(px*.1, 8, trexZ+2);
-    trexBillboard.lookAt(camera.position);
-    // Scale up as raptor approaches
-    const sc=Math.max(.6, Math.min(2.5, (65-trexGap)/20));
+    const sc=Math.max(0.18, Math.min(4.8, (64-trexGap)/16));
+    const bz=pz-17; // always between camera (pz-20) and player (pz)
+    const bh=16*sc; // billboard center height (bottom ~= ground)
+    const bob=trexGap<30 ? Math.abs(Math.sin(trexLegT*2.8))*sc*0.45 : 0;
+    trexBillboard.position.set(bx, bh+bob, bz);
+    // Upright billboard: rotate on Y only so it stays vertical
+    trexBillboard.rotation.y=Math.atan2(camera.position.x-bx, camera.position.z-bz);
     trexBillboard.scale.setScalar(sc);
-    trexBillboard.visible=trexGap<55;
+    trexBillboard.visible=true;
+  }
+  // ── Ground shadow under billboard
+  if(trexShadow){
+    const sc2=Math.max(0.12, Math.min(5.0, (64-trexGap)/14));
+    trexShadow.position.set(bx, 0.04, pz-17);
+    trexShadow.scale.setScalar(sc2);
+    trexShadow.material.opacity=Math.min(0.52, 0.06+sc2*0.08);
   }
 
-  // ── CSS overlay: image rises from bottom as raptor closes in
+  // ── CSS overlay: T-Rex photo rises from bottom as raptor closes in
   const wrap=document.getElementById('trex-wrap');
   if(trexGap>52){
     wrap.style.height='0'; wrap.style.opacity='0';
     wrap.classList.remove('danger');
   } else {
     const t=Math.max(0,Math.min(1,(52-trexGap)/52));
-    const hPct=Math.floor(Math.pow(t,.65)*96);
-    const op=(Math.pow(t,.5)*.9).toFixed(2);
+    const hPct=Math.floor(Math.pow(t,.6)*97);
+    const op=(Math.pow(t,.45)*.92).toFixed(2);
     wrap.style.height=hPct+'vh';
     wrap.style.opacity=op;
     if(trexGap<15) wrap.classList.add('danger');
     else           wrap.classList.remove('danger');
   }
 
-  // ── Danger vignette pulse (red edge)
+  // ── Danger vignette pulse
   const dp=document.getElementById('dpulse');
   if(dp){ if(trexGap<22) dp.classList.add('on'); else dp.classList.remove('on'); }
 
-  // ── Screen shake when raptor extremely close
+  // ── Screen shake when raptor about to catch player
   document.body.classList.toggle('camshake', trexGap<10);
 
   // ── Danger bar (top)
   const pct=Math.max(0,Math.min(100,((TREX_START_GAP-trexGap)/TREX_START_GAP)*100));
   document.getElementById('dangerbar').style.width=pct+'%';
 
-  // ── Danger text
+  // ── Danger text: alternates JP/EN
   const dtxt=document.getElementById('dangertxt');
   if(trexGap<20){
     dtxt.classList.add('show');
     const fl=Math.floor(Date.now()/280)%2===0;
     dtxt.style.opacity=trexGap<10?(fl?'1':'0.2'):'0.9';
-    dtxt.textContent=trexGap<8?'🦕 CAUGHT!':'⚠ FUKUIRAPTOR ⚠';
+    const jp=Math.floor(Date.now()/900)%2===0;
+    dtxt.textContent=trexGap<8?'🦕 捕まった！ CAUGHT!'
+      : jp?'🦕 フクイラプトル 接近！':'⚠ FUKUIRAPTOR APPROACHING ⚠';
   } else {
     dtxt.classList.remove('show');
   }
@@ -807,12 +778,29 @@ function spawnObs(z){
   }
 }
 function spawnLens(z){
+  // 眼鏡型コレクタブル（鯖江の眼鏡をイメージ）
   if(Math.random()<.72){
     const lane=Math.floor(Math.random()*3), cnt=1+Math.floor(Math.random()*5);
     for(let i=0;i<cnt;i++){
-      const t=new THREE.Mesh(new THREE.TorusGeometry(.48,.14,8,16),M.lens);
-      t.rotation.x=Math.PI/2; t.position.set(LANES[lane],1.25,z+9+i*2.6);
-      t.userData.lane=lane; scene.add(t); collectibles.push(t);
+      const g=new THREE.Group();
+      const lGeo=new THREE.TorusGeometry(.22,.07,10,18);
+      // Left lens
+      const lL=new THREE.Mesh(lGeo, M.lens); lL.position.x=-.32;
+      // Right lens
+      const lR=new THREE.Mesh(lGeo.clone(), M.lens); lR.position.x=.32;
+      // Bridge
+      const br=new THREE.Mesh(new THREE.BoxGeometry(.36,.07,.07), M.lens);
+      // Left arm
+      const aL=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,.5), M.lens);
+      aL.position.set(-.57,0,-.22);
+      // Right arm
+      const aR=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,.5), M.lens);
+      aR.position.set(.57,0,-.22);
+      g.add(lL,lR,br,aL,aR);
+      g.rotation.x=Math.PI/2; // lie flat so visible from camera above
+      g.position.set(LANES[lane],1.28,z+9+i*2.6);
+      g.userData.lane=lane;
+      scene.add(g); collectibles.push(g);
     }
   }
 }
@@ -839,18 +827,24 @@ let stageIdx=0,stageDist=0,laneCD=0,camX=0,invTimer=0;
 // ═══════════════════════════════════════════
 addEventListener('keydown',e=>{
   if(!running)return;
-  if(e.code==='ArrowLeft' &&lane>0&&laneCD<=0){lane--;laneCD=.15;}
-  if(e.code==='ArrowRight'&&lane<2&&laneCD<=0){lane++;laneCD=.15;}
+  if(e.code==='ArrowLeft' &&lane>0&&laneCD<=0){lane--;laneCD=.08;}
+  if(e.code==='ArrowRight'&&lane<2&&laneCD<=0){lane++;laneCD=.08;}
   if((e.code==='Space'||e.code==='ArrowUp')&&!jumping&&!sliding){jumping=true;pvy=JUMP_VY;e.preventDefault();}
   if(e.code==='ArrowDown'&&!jumping){sliding=true;slideT=.65;e.preventDefault();}
 });
 let tx0=0,ty0=0;
-addEventListener('touchstart',e=>{tx0=e.touches[0].clientX;ty0=e.touches[0].clientY;},{passive:true});
+addEventListener('touchstart',e=>{
+  // D-pad has its own handlers — don't steal its origin point
+  if(e.target.closest&&e.target.closest('#dpad'))return;
+  tx0=e.touches[0].clientX;ty0=e.touches[0].clientY;
+},{passive:true});
 addEventListener('touchend',e=>{
   if(!running)return;
+  // D-pad buttons handle themselves — global swipe must not override them
+  if(e.target.closest&&e.target.closest('#dpad'))return;
   const dx=e.changedTouches[0].clientX-tx0,dy=e.changedTouches[0].clientY-ty0;
   const ax=Math.abs(dx),ay=Math.abs(dy);
-  if(ax>28&&ax>ay){if(dx<0&&lane>0){lane--;laneCD=.15;}if(dx>0&&lane<2){lane++;laneCD=.15;}}
+  if(ax>28&&ax>ay){if(dx<0&&lane>0){lane--;laneCD=.08;}if(dx>0&&lane<2){lane++;laneCD=.08;}}
   else if(ay>28&&ay>ax){
     if(dy<0&&!jumping&&!sliding){jumping=true;pvy=JUMP_VY;}
     if(dy>0&&!jumping){sliding=true;slideT=.65;}
@@ -870,8 +864,8 @@ function bindBtn(id, fn){
   el.addEventListener('mouseup',  release);
   el.addEventListener('mouseleave',release);
 }
-function doLeft() { if(running&&lane>0&&laneCD<=0){lane--;laneCD=.15;} }
-function doRight(){ if(running&&lane<2&&laneCD<=0){lane++;laneCD=.15;} }
+function doLeft() { if(running&&lane>0&&laneCD<=0){lane--;laneCD=.08;} }
+function doRight(){ if(running&&lane<2&&laneCD<=0){lane++;laneCD=.08;} }
 function doJump() { if(running&&!jumping&&!sliding){jumping=true;pvy=JUMP_VY;} }
 function doSlide(){ if(running&&!jumping){sliding=true;slideT=.65;} }
 bindBtn('db-left', doLeft);
@@ -1013,7 +1007,12 @@ function animate(){
   sun.position.set(px+8,25,pz-12);
 
   const t=Date.now()*.003;
-  collectibles.forEach(c=>{ c.rotation.z+=dt*2.5; c.position.y=1.25+Math.sin(t+c.position.z*.3)*.2; });
+  collectibles.forEach(c=>{
+    // Glasses groups spin on Y (stays flat); mesh toruses spin on Z
+    if(c.isGroup) c.rotation.y+=dt*2.0;
+    else c.rotation.z+=dt*2.5;
+    c.position.y=1.28+Math.sin(t+c.position.z*.3)*.22;
+  });
 
   particles=particles.filter(p=>{
     p.userData.life-=dt;
