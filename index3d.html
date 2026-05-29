@@ -16,20 +16,24 @@ canvas{display:block}
 #lenses{font-size:18px;margin-top:4px;opacity:.9}
 #gtitle{font-size:22px;font-weight:900;color:#ff88cc;text-align:right}
 #spd{font-size:13px;color:#aaddff;margin-top:4px;text-align:right}
+#danger{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  font-size:14px;font-weight:900;color:#ff3300;pointer-events:none;z-index:10;
+  letter-spacing:2px;text-shadow:0 0 12px #ff0000;opacity:0;transition:opacity .3s}
+#danger.show{opacity:1}
 #overlay{position:fixed;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  background:rgba(0,0,0,.78);backdrop-filter:blur(10px);z-index:20}
-#overlay h1{font-size:clamp(40px,9vw,80px);font-weight:900;text-align:center;
-  background:linear-gradient(135deg,#ff88cc,#ffcc44);
+  background:rgba(0,0,0,.82);backdrop-filter:blur(10px);z-index:20}
+#overlay h1{font-size:clamp(38px,9vw,78px);font-weight:900;text-align:center;
+  background:linear-gradient(135deg,#ff8833,#ffcc44);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;
   line-height:1.1;margin-bottom:10px}
 .sub{color:#999;font-size:17px;margin-bottom:36px;text-align:center}
 #sbtn{padding:18px 52px;font-size:22px;font-weight:900;
-  background:linear-gradient(135deg,#ff44aa,#ff8800);color:#fff;
+  background:linear-gradient(135deg,#cc4400,#ff8800);color:#fff;
   border:none;border-radius:50px;cursor:pointer;
-  box-shadow:0 8px 32px rgba(255,68,170,.45);
+  box-shadow:0 8px 32px rgba(200,80,0,.5);
   transition:transform .15s,box-shadow .15s}
-#sbtn:hover{transform:scale(1.06);box-shadow:0 14px 44px rgba(255,68,170,.65)}
+#sbtn:hover{transform:scale(1.06);box-shadow:0 14px 44px rgba(200,80,0,.7)}
 #ctrl{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
   color:rgba(255,255,255,.45);font-size:13px;pointer-events:none;z-index:10}
 #banner{position:fixed;bottom:55px;left:50%;transform:translateX(-50%);
@@ -47,7 +51,7 @@ canvas{display:block}
 <div id="hud">
   <div class="hl">
     <div id="score">SCORE 0</div>
-    <div id="lenses">👓 LENSES 0</div>
+    <div id="lenses">🦕 LENS 0</div>
   </div>
   <div class="hl">
     <div id="gtitle">福井サーフェイス 3D</div>
@@ -55,12 +59,13 @@ canvas{display:block}
   </div>
 </div>
 
-<div id="banner">🚉 鯖江駅前 SABAE STATION</div>
+<div id="danger">⚠ FUKUIRAPTOR IS CLOSE ⚠</div>
+<div id="banner">🦕 恐竜遺跡 DINO RUINS</div>
 
 <div id="overlay">
   <h1>福井サーフェイス<br>3D</h1>
-  <div class="sub">Made in Sabae × Made for the World<br>FUKUI SURFACE 3D — Powered by Three.js</div>
-  <button id="sbtn" onclick="startGame()">▶ START 3D</button>
+  <div class="sub">恐竜王国・福井 × 鯖江の眼鏡<br>Run from FUKUIRAPTOR — Powered by Three.js</div>
+  <button id="sbtn" onclick="startGame()">▶ RUN!</button>
   <div style="color:#555;margin-top:22px;font-size:13px">← → Move &nbsp;·&nbsp; SPACE Jump &nbsp;·&nbsp; ↓ Slide</div>
 </div>
 
@@ -77,11 +82,17 @@ const JUMP_VY    = 15;
 const BASE_SPEED = 19;
 const STAGE_DIST = 900;
 
+// T-Rex constants
+const TREX_START_GAP = 60;   // starts this far behind player
+const TREX_CATCH_SPD = 0.07; // gap shrinks this fast per unit distance
+const TREX_HIT_PENALTY = 12; // obstacle hit = raptor gains this much
+
 const STAGES = [
+  {name:'🦕 恐竜遺跡', sub:'DINO RUINS — FUKUIRAPTOR TERRITORY',
+   sky:0x1a3015, fog:0x1e4018, track:0x7a7060, wall:0x5a5040, bld:0x3a4a2a, acc:0xffdd44,
+   jungle:true},
   {name:'🚉 鯖江駅前', sub:'SABAE STATION',
    sky:0x8ab4d8, fog:0xa8c8e8, track:0x2a3344, wall:0x3a4a5a, bld:0x445566, acc:0xffcc44},
-  {name:'🏮 商店街',   sub:'SHOTENGAI',
-   sky:0xe8c080, fog:0xf0c888, track:0x4a3322, wall:0x5a4030, bld:0x884422, acc:0xff7722},
   {name:'🌸 西山公園', sub:'NISHIYAMA PARK',
    sky:0x78d878, fog:0x90e890, track:0x283828, wall:0x304830, bld:0x336633, acc:0xff99cc},
   {name:'👓 メガネ工房',sub:'GLASSES WORKSHOP',
@@ -99,7 +110,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 
 const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(68, innerWidth/innerHeight, 0.1, 500);
+const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.1, 600);
 const clock  = new THREE.Clock();
 
 window.addEventListener('resize', () => {
@@ -109,14 +120,18 @@ window.addEventListener('resize', () => {
 });
 
 // Lights
-const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+const ambient = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambient);
 
-const sun = new THREE.DirectionalLight(0xfff8e8, 1.3);
+const sun = new THREE.DirectionalLight(0xffe8c0, 1.4);
 sun.castShadow = true;
-Object.assign(sun.shadow.camera, {near:.1, far:120, left:-22, right:22, top:22, bottom:-22});
+Object.assign(sun.shadow.camera, {near:.1, far:140, left:-30, right:30, top:30, bottom:-30});
 sun.shadow.mapSize.set(1024, 1024);
 scene.add(sun);
+
+// Secondary fill light (jungle green bounce)
+const fillLight = new THREE.HemisphereLight(0x80ff60, 0x3a2810, 0.4);
+scene.add(fillLight);
 
 // ── MATERIALS ──────────────────────────────────────────────
 const M = {
@@ -129,15 +144,15 @@ const M = {
   obsOrange  : new THREE.MeshLambertMaterial({color:0xff8800}),
   lens       : new THREE.MeshLambertMaterial({color:0xffee44, emissive:0x664400}),
   shadow     : new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:.28}),
-  lane       : new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.12}),
+  lane       : new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:.10}),
 };
-let trackMat = new THREE.MeshLambertMaterial({color:0x2a3344});
-let wallMat  = new THREE.MeshLambertMaterial({color:0x3a4a5a});
-let bldMat   = new THREE.MeshLambertMaterial({color:0x445566});
+let trackMat = new THREE.MeshLambertMaterial({color:0x7a7060});
+let wallMat  = new THREE.MeshLambertMaterial({color:0x5a5040});
+let bldMat   = new THREE.MeshLambertMaterial({color:0x3a4a2a});
 
 function applyStage(st) {
   scene.background = new THREE.Color(st.sky);
-  scene.fog        = new THREE.FogExp2(st.fog, 0.011);
+  scene.fog        = new THREE.FogExp2(st.fog, 0.012);
   trackMat.color.setHex(st.track);
   wallMat.color.setHex(st.wall);
   bldMat.color.setHex(st.bld);
@@ -155,56 +170,373 @@ function buildPlayer() {
     pg.add(m);
     return m;
   };
-  // Body
-  add(new THREE.BoxGeometry(1.05, 1.45, .65), M.playerBody,  0, 1.45, 0);
-  // Head
-  add(new THREE.BoxGeometry(.85, .85, .78),    M.playerHead,  0, 2.5,  0);
-  // Glasses frame
-  add(new THREE.BoxGeometry(.95, .18, .08),    M.glasses,     0, 2.5,  .42);
-  // Lens L / R
-  const lg = new THREE.CylinderGeometry(.21, .21, .07, 12);
-  const lL = add(lg, M.glassLens, -.27, 2.5, .44);
-  const lR = add(lg.clone(), M.glassLens, .27, 2.5, .44);
+  add(new THREE.BoxGeometry(1.05,1.45,.65), M.playerBody, 0,1.45,0);
+  add(new THREE.BoxGeometry(.85,.85,.78),   M.playerHead, 0,2.5,0);
+  add(new THREE.BoxGeometry(.95,.18,.08),   M.glasses,    0,2.5,.42);
+  const lg = new THREE.CylinderGeometry(.21,.21,.07,12);
+  const lL = add(lg,        M.glassLens, -.27,2.5,.44);
+  const lR = add(lg.clone(),M.glassLens,  .27,2.5,.44);
   lL.rotation.x = lR.rotation.x = Math.PI/2;
-  // Arms
-  const ag = new THREE.BoxGeometry(.3, .92, .3);
-  add(ag,        M.playerBody,  -.68, 1.52, 0);
-  add(ag.clone(),M.playerBody,   .68, 1.52, 0);
-  // Legs
-  const legG = new THREE.BoxGeometry(.38, .9, .38);
-  leftLeg  = add(legG,        M.legPant, -.28, .45, 0);
-  rightLeg = add(legG.clone(),M.legPant,  .28, .45, 0);
-  // Drop shadow
-  const sh = new THREE.Mesh(new THREE.CircleGeometry(.85, 14), M.shadow);
-  sh.rotation.x = -Math.PI/2;
-  sh.position.y = .02;
-  pg.add(sh);
-  pg.userData.shadow = sh;
+  const ag = new THREE.BoxGeometry(.3,.92,.3);
+  add(ag,        M.playerBody, -.68,1.52,0);
+  add(ag.clone(),M.playerBody,  .68,1.52,0);
+  const legG = new THREE.BoxGeometry(.38,.9,.38);
+  leftLeg  = add(legG,        M.legPant, -.28,.45,0);
+  rightLeg = add(legG.clone(),M.legPant,  .28,.45,0);
+  const sh = new THREE.Mesh(new THREE.CircleGeometry(.85,14),M.shadow);
+  sh.rotation.x = -Math.PI/2; sh.position.y = .02;
+  pg.add(sh); pg.userData.shadow = sh;
   scene.add(pg);
 }
 
-// ── TRACK SEGMENTS ─────────────────────────────────────────
-let segments  = [];
-let obstacles = [];
-let collectibles = [];
-let particles = [];
+// ── T-REX CHASER ───────────────────────────────────────────
+let trexGroup = null;
+let trexLegL, trexLegR, trexLegLInner, trexLegRInner;
+let trexLegT  = 0;
+let trexGap   = TREX_START_GAP;   // distance behind player
 
-function lastSegZ() {
-  return segments.length ? segments[segments.length-1].userData.z + SEG_LEN : pz;
+function buildTrex() {
+  if (trexGroup) scene.remove(trexGroup);
+  trexGroup = new THREE.Group();
+
+  const brownM  = new THREE.MeshLambertMaterial({color:0x8B6420});
+  const darkM   = new THREE.MeshLambertMaterial({color:0x5a3c10});
+  const bellyM  = new THREE.MeshLambertMaterial({color:0xc8a050});
+  const eyeM    = new THREE.MeshLambertMaterial({color:0xddee00, emissive:0x556600});
+  const toothM  = new THREE.MeshLambertMaterial({color:0xf8f0d0});
+  const throatM = new THREE.MeshLambertMaterial({color:0xcc3322});
+
+  const add = (geo, mat, x, y, z, rx, ry, rz) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    if (rx !== undefined) m.rotation.set(rx, ry||0, rz||0);
+    m.castShadow = true;
+    trexGroup.add(m);
+    return m;
+  };
+
+  // ── BODY (forward-leaning running pose)
+  add(new THREE.BoxGeometry(3.0, 2.4, 4.2), brownM, 0, 4.2, 0, -0.28);
+  // Belly
+  add(new THREE.BoxGeometry(2.4, 1.6, 3.8), bellyM, 0, 3.5, 0.2, -0.28);
+
+  // ── NECK
+  add(new THREE.BoxGeometry(1.7, 2.0, 1.6), brownM, 0, 5.4, 1.8, -0.35);
+
+  // ── HEAD
+  const headG = new THREE.Group();
+  // Skull
+  add(new THREE.BoxGeometry(2.2, 1.7, 3.0), brownM, 0, 6.6, 3.4);
+  // Snout lower
+  add(new THREE.BoxGeometry(1.9, 0.65, 2.6), brownM, 0, 5.7, 3.5, 0.12);
+  // Upper jaw ridge
+  add(new THREE.BoxGeometry(1.6, 0.4, 2.8), darkM,  0, 6.1, 3.6);
+  // OPEN MOUTH / THROAT
+  add(new THREE.BoxGeometry(1.5, 0.6, 2.4), throatM, 0, 5.95, 3.4);
+  // Teeth (upper)
+  for (let t=0;t<5;t++) {
+    const tx = (t-2)*0.42;
+    add(new THREE.BoxGeometry(0.14,0.45,0.14), toothM, tx, 6.0, 4.7);
+  }
+  // Teeth (lower)
+  for (let t=0;t<4;t++) {
+    const tx = (t-1.5)*0.44;
+    add(new THREE.BoxGeometry(0.13,0.38,0.13), toothM, tx, 5.7, 4.65);
+  }
+  // Eyes
+  add(new THREE.SphereGeometry(0.32,10,10), eyeM,  -0.72, 7.05, 3.7);
+  add(new THREE.SphereGeometry(0.32,10,10), eyeM,   0.72, 7.05, 3.7);
+  // Pupils
+  add(new THREE.SphereGeometry(0.18,8,8), darkM, -0.70, 7.05, 4.0);
+  add(new THREE.SphereGeometry(0.18,8,8), darkM,  0.70, 7.05, 4.0);
+  // Brow ridges
+  add(new THREE.BoxGeometry(0.5,0.25,0.7), darkM, -0.7, 7.45, 3.5);
+  add(new THREE.BoxGeometry(0.5,0.25,0.7), darkM,  0.7, 7.45, 3.5);
+
+  // ── TAIL
+  add(new THREE.BoxGeometry(2.2, 1.8, 3.8), brownM,  0, 4.5, -2.5,  0.22);
+  add(new THREE.BoxGeometry(1.6, 1.3, 3.2), brownM,  0, 3.8, -5.5,  0.38);
+  add(new THREE.BoxGeometry(1.0, 0.9, 3.0), brownM,  0, 2.9, -8.2,  0.48);
+  add(new THREE.BoxGeometry(0.5, 0.5, 2.0), darkM,   0, 2.0,-10.5,  0.45);
+
+  // ── TINY ARMS (T-Rex!) — upper arms
+  add(new THREE.BoxGeometry(0.55, 1.1, 0.55), brownM, -1.4, 5.1, 1.6, 0,0, 0.7);
+  add(new THREE.BoxGeometry(0.55, 1.1, 0.55), brownM,  1.4, 5.1, 1.6, 0,0,-0.7);
+  // Claws
+  add(new THREE.BoxGeometry(0.5, 0.7, 0.5), darkM, -1.9, 4.55, 1.9, 0,0, 0.6);
+  add(new THREE.BoxGeometry(0.5, 0.7, 0.5), darkM,  1.9, 4.55, 1.9, 0,0,-0.6);
+
+  // ── LEGS — thighs
+  add(new THREE.BoxGeometry(1.25, 2.8, 1.25), brownM, -1.2, 2.8, 0.4);
+  add(new THREE.BoxGeometry(1.25, 2.8, 1.25), brownM,  1.2, 2.8, 0.4);
+  // Lower legs (animated)
+  trexLegL = add(new THREE.BoxGeometry(1.0, 2.4, 1.0), darkM, -1.2, 0.8, 0.7);
+  trexLegR = add(new THREE.BoxGeometry(1.0, 2.4, 1.0), darkM,  1.2, 0.8, 0.7);
+  // Feet
+  add(new THREE.BoxGeometry(1.3, 0.55, 2.2), darkM, -1.2, -0.3, 1.3);
+  add(new THREE.BoxGeometry(1.3, 0.55, 2.2), darkM,  1.2, -0.3, 1.3);
+
+  // ── DORSAL SCALES
+  const scaleMat = new THREE.MeshLambertMaterial({color:0x3a2810});
+  for (let s=0;s<7;s++) {
+    const sh = 0.4 + s*0.12;
+    add(new THREE.BoxGeometry(0.28, sh, 0.28), scaleMat,
+        0, 5.6 + sh/2, -s*0.7, -0.28 - s*0.04);
+  }
+
+  // Scale T-Rex big
+  trexGroup.scale.set(1.5, 1.5, 1.5);
+  scene.add(trexGroup);
 }
 
-function makeSegment(z) {
+function updateTrex(dt, move) {
+  if (!trexGroup || !running) return;
+
+  // Slowly close the gap
+  trexGap -= move * TREX_CATCH_SPD;
+  trexGap = Math.max(trexGap, 2.5);
+
+  // Position behind player
+  const trexZ = pz - trexGap;
+  trexGroup.position.set(px * 0.15, 0, trexZ);
+
+  // Leg animation
+  trexLegT += dt * 4.5;
+  if (trexLegL) {
+    trexLegL.rotation.x =  Math.sin(trexLegT) * 0.55;
+    trexLegR.rotation.x = -Math.sin(trexLegT) * 0.55;
+  }
+
+  // Body bobbing
+  trexGroup.position.y = Math.abs(Math.sin(trexLegT * 0.5)) * 0.25;
+  trexGroup.rotation.y = Math.PI; // face toward player (flip Z)
+
+  // Danger UI
+  const dangerEl = document.getElementById('danger');
+  if (trexGap < 28) {
+    dangerEl.classList.add('show');
+    const flash = Math.floor(Date.now()/300) % 2 === 0;
+    dangerEl.style.opacity = trexGap < 14 ? (flash ? '1' : '0.3') : '0.8';
+    dangerEl.textContent = trexGap < 14 ? '🦕 DANGER! FUKUIRAPTOR!' : '⚠ FUKUIRAPTOR IS CLOSE ⚠';
+  } else {
+    dangerEl.classList.remove('show');
+  }
+
+  // T-Rex caught player
+  if (trexGap < 3) { die(); }
+}
+
+// ── JUNGLE SEGMENT ─────────────────────────────────────────
+const columnMat = new THREE.MeshLambertMaterial({color:0x9a8a72});
+const mossMat   = new THREE.MeshLambertMaterial({color:0x2a6a1a});
+const trunkMat  = new THREE.MeshLambertMaterial({color:0x3a2510});
+const leafMatA  = new THREE.MeshLambertMaterial({color:0x1a5a10});
+const leafMatB  = new THREE.MeshLambertMaterial({color:0x2a8020});
+const fernMat   = new THREE.MeshLambertMaterial({color:0x1e7a14});
+const waterMat  = new THREE.MeshBasicMaterial({color:0x70b8ff, transparent:true, opacity:0.55, side:THREE.DoubleSide});
+const stoneMat  = new THREE.MeshLambertMaterial({color:0x7a7060});
+const crackMat  = new THREE.MeshBasicMaterial({color:0x2a2018});
+
+function makeJungleSegment(z) {
   const g = new THREE.Group();
   g.userData.z = z;
 
-  // Ground
+  // ── Stone path
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(11, SEG_LEN), stoneMat);
+  floor.rotation.x = -Math.PI/2;
+  floor.position.set(0, 0, z + SEG_LEN/2);
+  floor.receiveShadow = true;
+  g.add(floor);
+
+  // Stone tile grid lines
+  for (let ti=0;ti<5;ti++) {
+    const ln = new THREE.Mesh(new THREE.PlaneGeometry(11, 0.08), crackMat);
+    ln.rotation.x = -Math.PI/2;
+    ln.position.set(0, 0.01, z + ti*(SEG_LEN/5));
+    g.add(ln);
+  }
+  for (let xi of [-3.5, 0, 3.5]) {
+    const vl = new THREE.Mesh(new THREE.PlaneGeometry(0.07, SEG_LEN), crackMat);
+    vl.rotation.x = -Math.PI/2;
+    vl.position.set(xi, 0.01, z + SEG_LEN/2);
+    g.add(vl);
+  }
+
+  // Random cracks on path
+  for (let cr=0;cr<4;cr++) {
+    const crk = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 1.5+Math.random()*2), crackMat);
+    crk.rotation.x = -Math.PI/2;
+    crk.rotation.z = Math.random()*Math.PI;
+    crk.position.set((Math.random()-.5)*8, 0.011, z + Math.random()*SEG_LEN);
+    g.add(crk);
+  }
+
+  // ── Stone curbs (mossy)
+  for (let sx of [-1,1]) {
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, SEG_LEN), columnMat);
+    curb.position.set(sx*5.85, 0.22, z + SEG_LEN/2);
+    curb.receiveShadow = true; curb.castShadow = true;
+    g.add(curb);
+    // Moss on curb
+    const mossStrip = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.2, SEG_LEN*0.9), mossMat);
+    mossStrip.position.set(sx*5.85, 0.46, z + SEG_LEN/2);
+    mossStrip.scale.y = 0.3;
+    g.add(mossStrip);
+  }
+
+  // ── Stone columns
+  const numCols = 3;
+  for (let side of [-1,1]) {
+    for (let c=0;c<numCols;c++) {
+      const cz = z + (c + 0.5)*(SEG_LEN/numCols) + (Math.random()-.5)*3;
+      const cx = side*(7.5 + Math.random()*3);
+      const colH = 3.5 + Math.random()*9;
+      const broken = Math.random() > 0.5;
+      const finalH = broken ? colH * (0.3 + Math.random()*0.5) : colH;
+
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, finalH, 8), columnMat);
+      col.position.set(cx, finalH/2, cz);
+      col.castShadow = true; col.receiveShadow = true;
+      g.add(col);
+
+      if (!broken) {
+        // Capital
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 1.7), columnMat);
+        cap.position.set(cx, finalH+0.25, cz);
+        g.add(cap);
+      }
+      // Moss patches
+      for (let mp=0;mp<2;mp++) {
+        const moss = new THREE.Mesh(new THREE.SphereGeometry(0.55,6,5), mossMat);
+        moss.position.set(cx + (Math.random()-.5)*0.8, finalH*(0.3+Math.random()*0.5), cz+(Math.random()-.5)*0.8);
+        moss.scale.set(1.2, 0.3, 1.0);
+        g.add(moss);
+      }
+      // Toppled column chunk nearby
+      if (broken && Math.random()>.4) {
+        const chunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 1.8, 8), columnMat);
+        chunk.position.set(cx + side*(1.5+Math.random()), 0.4, cz + (Math.random()-.5)*3);
+        chunk.rotation.z = 1.4 + (Math.random()-.5)*0.5;
+        chunk.castShadow = true;
+        g.add(chunk);
+      }
+    }
+  }
+
+  // ── Jungle trees (far sides)
+  for (let side of [-1,1]) {
+    const numT = 2 + Math.floor(Math.random()*2);
+    for (let t=0;t<numT;t++) {
+      const tx = side*(10 + Math.random()*9);
+      const tz = z + Math.random()*SEG_LEN;
+      const th  = 9 + Math.random()*12;
+      const isPalm = Math.random() > 0.5;
+
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.55, th, 7), trunkMat);
+      trunk.position.set(tx, th/2, tz);
+      trunk.rotation.z = (Math.random()-.5)*0.15;
+      trunk.castShadow = true;
+      g.add(trunk);
+
+      if (isPalm) {
+        // Palm fronds
+        for (let f=0;f<7;f++) {
+          const angle = (f/7)*Math.PI*2;
+          const fl = 3.5 + Math.random()*2;
+          const frond = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, fl), leafMatB);
+          frond.position.set(tx + Math.cos(angle)*1.5, th+0.3, tz + Math.sin(angle)*1.5);
+          frond.rotation.y = angle;
+          frond.rotation.z = 0.55;
+          g.add(frond);
+        }
+        // Small crown
+        const crown = new THREE.Mesh(new THREE.SphereGeometry(1.3, 7, 6), leafMatA);
+        crown.position.set(tx, th+0.5, tz);
+        crown.scale.y = 0.5;
+        g.add(crown);
+      } else {
+        // Broad-leaf tree blobs
+        for (let b=0;b<3;b++) {
+          const r = 2.2 + Math.random()*2;
+          const lm = b%2===0 ? leafMatA : leafMatB;
+          const blob = new THREE.Mesh(new THREE.SphereGeometry(r, 7, 6), lm);
+          blob.position.set(
+            tx + (Math.random()-.5)*2.5,
+            th - b*0.6 + Math.random()*1.5,
+            tz + (Math.random()-.5)*2.5
+          );
+          blob.scale.y = 0.65;
+          g.add(blob);
+        }
+      }
+    }
+  }
+
+  // ── Ferns on path edges
+  for (let side of [-1,1]) {
+    const numF = 5 + Math.floor(Math.random()*4);
+    for (let f=0;f<numF;f++) {
+      const fz = z + Math.random()*SEG_LEN;
+      const fx = side*(6.2 + Math.random()*1.5);
+      const fern = new THREE.Mesh(new THREE.SphereGeometry(0.7+Math.random()*0.5,6,5), fernMat);
+      fern.position.set(fx, 0.35, fz);
+      fern.scale.set(1.6, 0.45, 1.4);
+      g.add(fern);
+    }
+  }
+
+  // ── Waterfall (occasional)
+  if (Math.random() > 0.65) {
+    const ws = Math.random()>.5 ? 1 : -1;
+    const wx = ws*(14 + Math.random()*4);
+    const wz = z + SEG_LEN/2;
+    const wh = 14 + Math.random()*10;
+    const wfall = new THREE.Mesh(new THREE.PlaneGeometry(2.5, wh), waterMat);
+    wfall.position.set(wx, wh/2, wz);
+    wfall.rotation.y = -ws*0.4;
+    g.add(wfall);
+    // Mist at base
+    const mist = new THREE.Mesh(new THREE.SphereGeometry(2.5,8,6),
+      new THREE.MeshBasicMaterial({color:0xaaddff, transparent:true, opacity:0.18}));
+    mist.position.set(wx, 1.5, wz+ws);
+    mist.scale.set(1.5, 0.4, 1.5);
+    g.add(mist);
+  }
+
+  // ── Stone arches (occasional)
+  if (Math.random() > 0.6) {
+    const archX = Math.random()>.5 ? -8 : 8;
+    const archZ = z + SEG_LEN/2 + (Math.random()-.5)*5;
+    const archH = 7 + Math.random()*5;
+    // Left pillar
+    const ap = new THREE.Mesh(new THREE.BoxGeometry(1.2, archH, 1.2), columnMat);
+    ap.position.set(archX - 2.5, archH/2, archZ);
+    ap.castShadow = true; g.add(ap);
+    // Right pillar
+    const ap2 = ap.clone();
+    ap2.position.x = archX + 2.5;
+    g.add(ap2);
+    // Lintel
+    const lin = new THREE.Mesh(new THREE.BoxGeometry(6.5, 1.1, 1.2), columnMat);
+    lin.position.set(archX, archH+0.55, archZ);
+    lin.castShadow = true; g.add(lin);
+  }
+
+  scene.add(g);
+  segments.push(g);
+}
+
+// ── REGULAR SEGMENT (city/park/etc.) ───────────────────────
+function makeCitySegment(z) {
+  const g = new THREE.Group();
+  g.userData.z = z;
+
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(11, SEG_LEN), trackMat);
   floor.rotation.x = -Math.PI/2;
   floor.position.set(0, 0, z + SEG_LEN/2);
   floor.receiveShadow = true;
   g.add(floor);
 
-  // Lane lines
   for (let x of [-3.5, 0, 3.5]) {
     const ln = new THREE.Mesh(new THREE.PlaneGeometry(.07, SEG_LEN), M.lane);
     ln.rotation.x = -Math.PI/2;
@@ -212,45 +544,42 @@ function makeSegment(z) {
     g.add(ln);
   }
 
-  // Side curbs
-  for (let sx of [-1, 1]) {
-    const curb = new THREE.Mesh(new THREE.BoxGeometry(.4, .35, SEG_LEN), wallMat);
-    curb.position.set(sx * 5.7, .17, z + SEG_LEN/2);
-    curb.receiveShadow = true;
-    g.add(curb);
+  for (let sx of [-1,1]) {
+    const curb = new THREE.Mesh(new THREE.BoxGeometry(.4,.35,SEG_LEN), wallMat);
+    curb.position.set(sx*5.7,.17, z+SEG_LEN/2);
+    curb.receiveShadow = true; g.add(curb);
   }
 
-  // Buildings
   const si = stageIdx;
   const bCount = 2 + Math.floor(Math.random()*3);
   for (let side of [-1,1]) {
-    for (let b = 0; b < bCount; b++) {
-      const bh = 6 + Math.random()*22;
-      const bw = 3 + Math.random()*5;
-      const bd = 5 + Math.random()*7;
-      const bx = side*(7.5 + Math.random()*9);
-      const bz = z + 3 + b*(SEG_LEN/bCount) + Math.random()*4;
-      const blk = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), bldMat);
-      blk.position.set(bx, bh/2, bz);
-      blk.castShadow = true;
-      g.add(blk);
-      // Windows
+    for (let b=0;b<bCount;b++) {
+      const bh = 6+Math.random()*22, bw=3+Math.random()*5, bd=5+Math.random()*7;
+      const bx = side*(7.5+Math.random()*9);
+      const bz = z+3+b*(SEG_LEN/bCount)+Math.random()*4;
+      const blk = new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd), bldMat);
+      blk.position.set(bx,bh/2,bz); blk.castShadow=true; g.add(blk);
       if (Math.random()>.35) {
-        const wc = STAGES[si].acc;
-        const winMat = new THREE.MeshBasicMaterial({color: wc});
+        const winMat = new THREE.MeshBasicMaterial({color: STAGES[si].acc});
         const rows = Math.floor(bh/4);
-        for (let r=1; r<=rows; r++) {
-          const win = new THREE.Mesh(new THREE.BoxGeometry(bw*.7, .35, .1), winMat);
-          const faceZ = bz + (side>0 ? -bd/2-.06 : bd/2+.06);
-          win.position.set(bx, r*4 - 2, faceZ);
+        for (let r=1;r<=rows;r++) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(bw*.7,.35,.1), winMat);
+          win.position.set(bx, r*4-2, bz+(side>0?-bd/2-.06:bd/2+.06));
           g.add(win);
         }
       }
     }
   }
+  scene.add(g); segments.push(g);
+}
 
-  scene.add(g);
-  segments.push(g);
+function makeSegment(z) {
+  if (STAGES[stageIdx].jungle) makeJungleSegment(z);
+  else makeCitySegment(z);
+}
+
+function lastSegZ() {
+  return segments.length ? segments[segments.length-1].userData.z + SEG_LEN : pz;
 }
 
 function refreshTrack() {
@@ -261,45 +590,40 @@ function refreshTrack() {
     spawnLens(z);
   }
   segments = segments.filter(s => {
-    if (s.userData.z < pz - SEGS_BACK * SEG_LEN) {
-      scene.remove(s);
-      return false;
-    }
+    if (s.userData.z < pz - SEGS_BACK*SEG_LEN) { scene.remove(s); return false; }
     return true;
   });
 }
 
 // ── OBSTACLES ──────────────────────────────────────────────
+let segments=[], obstacles=[], collectibles=[], particles=[];
+
 function spawnObs(z) {
   if (Math.random() < .55) {
-    const sz = z + 10 + Math.random()*18;
+    const sz = z+10+Math.random()*18;
     const type = Math.floor(Math.random()*3);
     let obs;
-
-    if (type === 0) {
-      // Solid block — jump over
+    if (type===0) {
       const lane = Math.floor(Math.random()*3);
-      obs = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.6, 1.3), M.obsRed);
-      obs.position.set(LANES[lane], 1.3, sz);
+      obs = new THREE.Mesh(new THREE.BoxGeometry(2.8,2.6,1.3), M.obsRed);
+      obs.position.set(LANES[lane],1.3,sz);
       obs.userData = {type:'block', lane};
-    } else if (type === 1) {
-      // Barrier — slide under
+    } else if (type===1) {
       const lane = Math.floor(Math.random()*3);
       obs = new THREE.Group();
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(2.8, .5, .3), M.obsOrange);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(2.8,.5,.3), M.obsOrange);
       bar.position.y = 1.5;
       const pL = new THREE.Mesh(new THREE.BoxGeometry(.2,1.5,.2), M.obsOrange);
       pL.position.set(-1.2,.75,0);
       obs.add(bar, pL, pL.clone());
       obs.children[2].position.set(1.2,.75,0);
-      obs.position.set(LANES[lane], 0, sz);
+      obs.position.set(LANES[lane],0,sz);
       obs.userData = {type:'barrier', lane};
     } else {
-      // Two-lane wall — must be in safe lane
       const safe = Math.floor(Math.random()*3);
       obs = new THREE.Group();
       for (let l=0;l<3;l++) {
-        if(l===safe) continue;
+        if (l===safe) continue;
         const blk = new THREE.Mesh(new THREE.BoxGeometry(2.6,2.2,1.1), M.obsRed);
         blk.position.set(LANES[l],1.1,0);
         obs.add(blk);
@@ -308,23 +632,21 @@ function spawnObs(z) {
       obs.userData = {type:'multi', safe};
     }
     obs.castShadow = true;
-    scene.add(obs);
-    obstacles.push(obs);
+    scene.add(obs); obstacles.push(obs);
   }
 }
 
 // ── COLLECTIBLES ───────────────────────────────────────────
 function spawnLens(z) {
-  if (Math.random() < .72) {
+  if (Math.random()<.72) {
     const lane = Math.floor(Math.random()*3);
-    const cnt  = 1 + Math.floor(Math.random()*5);
+    const cnt  = 1+Math.floor(Math.random()*5);
     for (let i=0;i<cnt;i++) {
       const t = new THREE.Mesh(new THREE.TorusGeometry(.48,.14,8,16), M.lens);
       t.rotation.x = Math.PI/2;
-      t.position.set(LANES[lane], 1.25, z+9+i*2.6);
+      t.position.set(LANES[lane],1.25,z+9+i*2.6);
       t.userData.lane = lane;
-      scene.add(t);
-      collectibles.push(t);
+      scene.add(t); collectibles.push(t);
     }
   }
 }
@@ -337,39 +659,19 @@ function burst(x,y,z) {
       new THREE.MeshBasicMaterial({color:0xffee44, transparent:true, opacity:1})
     );
     p.position.set(x,y,z);
-    p.userData = {
-      vx:(Math.random()-.5)*9,
-      vy:3+Math.random()*7,
-      vz:(Math.random()-.5)*5,
-      life:.65, maxLife:.65
-    };
-    scene.add(p);
-    particles.push(p);
+    p.userData = {vx:(Math.random()-.5)*9, vy:3+Math.random()*7, vz:(Math.random()-.5)*5, life:.65, maxLife:.65};
+    scene.add(p); particles.push(p);
   }
 }
 
 // ── GAME STATE ─────────────────────────────────────────────
-let running = false;
-let lane    = 1;
-let pz      = 0;      // player world Z
-let px      = 0;      // player lerped X
-let py      = 0;      // player height
-let pvy     = 0;
-let jumping = false;
-let sliding = false;
-let slideT  = 0;
-let score   = 0;
-let lensCount = 0;
-let dist    = 0;
-let speed   = BASE_SPEED;
-let stageIdx   = 0;
-let stageDist  = 0;
-let laneCD  = 0;
-let camX    = 0;
-let invTimer = 0;
+let running=false, lane=1, pz=0, px=0, py=0, pvy=0;
+let jumping=false, sliding=false, slideT=0;
+let score=0, lensCount=0, dist=0, speed=BASE_SPEED;
+let stageIdx=0, stageDist=0, laneCD=0, camX=0, invTimer=0;
 
 // ── INPUT ──────────────────────────────────────────────────
-addEventListener('keydown', e => {
+addEventListener('keydown', e=>{
   if (!running) return;
   if (e.code==='ArrowLeft'  && lane>0 && laneCD<=0) { lane--; laneCD=.15; }
   if (e.code==='ArrowRight' && lane<2 && laneCD<=0) { lane++; laneCD=.15; }
@@ -378,46 +680,48 @@ addEventListener('keydown', e => {
   }
   if (e.code==='ArrowDown' && !jumping) { sliding=true; slideT=.65; e.preventDefault(); }
 });
-
 let tx0=0, ty0=0;
 addEventListener('touchstart', e=>{tx0=e.touches[0].clientX; ty0=e.touches[0].clientY;},{passive:true});
-addEventListener('touchend',   e=>{
-  if(!running) return;
+addEventListener('touchend', e=>{
+  if (!running) return;
   const dx=e.changedTouches[0].clientX-tx0, dy=e.changedTouches[0].clientY-ty0;
   const ax=Math.abs(dx), ay=Math.abs(dy);
-  if(ax>28&&ax>ay){ if(dx<0&&lane>0){lane--;laneCD=.15;} if(dx>0&&lane<2){lane++;laneCD=.15;} }
-  else if(ay>28&&ay>ax){
-    if(dy<0&&!jumping&&!sliding){jumping=true;pvy=JUMP_VY;}
-    if(dy>0&&!jumping){sliding=true;slideT=.65;}
+  if (ax>28&&ax>ay){ if(dx<0&&lane>0){lane--;laneCD=.15;} if(dx>0&&lane<2){lane++;laneCD=.15;} }
+  else if (ay>28&&ay>ax){
+    if (dy<0&&!jumping&&!sliding){jumping=true;pvy=JUMP_VY;}
+    if (dy>0&&!jumping){sliding=true;slideT=.65;}
   }
 },{passive:true});
 
 // ── COLLISION ──────────────────────────────────────────────
 function collide() {
-  // Lenses
   collectibles = collectibles.filter(c => {
     if (c.position.z < pz-12) { scene.remove(c); return false; }
-    if (Math.abs(c.position.z-pz)<2.4 &&
-        Math.abs(c.position.x-px)<2.0 &&
-        Math.abs(c.position.y-py-1.3)<1.5) {
-      burst(c.position.x, c.position.y, c.position.z);
-      scene.remove(c);
-      lensCount++;
-      return false;
+    if (Math.abs(c.position.z-pz)<2.4 && Math.abs(c.position.x-px)<2.0 && Math.abs(c.position.y-py-1.3)<1.5) {
+      burst(c.position.x,c.position.y,c.position.z);
+      scene.remove(c); lensCount++; return false;
     }
     return true;
   });
   if (invTimer>0) return;
-  // Obstacles
   for (const o of obstacles) {
     const dz = Math.abs(o.position.z - pz);
-    if (dz > 7) continue;
+    if (dz>7) continue;
     if (o.userData.type==='block') {
-      if (Math.abs(o.position.x-px)<2.3 && dz<2.1 && py<2.4) { die(); return; }
+      if (Math.abs(o.position.x-px)<2.3 && dz<2.1 && py<2.4) {
+        trexGap -= TREX_HIT_PENALTY; // raptor gains on hit!
+        die(); return;
+      }
     } else if (o.userData.type==='barrier') {
-      if (Math.abs(o.position.x-px)<2.3 && dz<1.8 && !sliding)  { die(); return; }
+      if (Math.abs(o.position.x-px)<2.3 && dz<1.8 && !sliding) {
+        trexGap -= TREX_HIT_PENALTY;
+        die(); return;
+      }
     } else {
-      if (lane!==o.userData.safe && dz<2.1 && py<2.4) { die(); return; }
+      if (lane!==o.userData.safe && dz<2.1 && py<2.4) {
+        trexGap -= TREX_HIT_PENALTY;
+        die(); return;
+      }
     }
   }
 }
@@ -429,17 +733,19 @@ function showBanner(txt) {
   b.textContent = txt;
   b.classList.add('show');
   clearTimeout(bannerTO);
-  bannerTO = setTimeout(() => b.classList.remove('show'), 3000);
+  bannerTO = setTimeout(()=>b.classList.remove('show'), 3000);
 }
 
 // ── GAME OVER ──────────────────────────────────────────────
 function die() {
   running = false;
+  document.getElementById('danger').classList.remove('show');
   const ov = document.getElementById('overlay');
   ov.innerHTML = `
     <h1>GAME<br>OVER</h1>
     <div style="color:#ffcc44;font-size:28px;margin-bottom:8px">SCORE ${score.toLocaleString()}</div>
-    <div style="color:#aaa;margin-bottom:28px">👓 LENSES ${lensCount}</div>
+    <div style="color:#aaa;margin-bottom:8px">🦕 LENS ${lensCount}</div>
+    <div style="color:#ff5533;font-size:16px;margin-bottom:24px">FUKUIRAPTOR GOT YOU!</div>
     <button id="sbtn" onclick="startGame()">▶ TRY AGAIN</button>`;
   ov.classList.remove('hidden');
   document.getElementById('ctrl').classList.add('hidden');
@@ -447,7 +753,6 @@ function die() {
 
 // ── START ──────────────────────────────────────────────────
 function startGame() {
-  // Cleanup
   [...obstacles,...collectibles,...particles,...segments].forEach(o=>scene.remove(o));
   obstacles=[]; collectibles=[]; particles=[]; segments=[];
 
@@ -456,25 +761,31 @@ function startGame() {
   score=0; lensCount=0; dist=0;
   speed=BASE_SPEED; stageIdx=0; stageDist=0;
   laneCD=0; camX=0; invTimer=0; legT=0;
+  trexGap = TREX_START_GAP;
 
   applyStage(STAGES[0]);
-  sun.position.set(5,20,-10);
+  // Jungle sun (warm dappled)
+  sun.position.set(8, 25, -12);
+  sun.color.setHex(0xffe090);
+  fillLight.color.setHex(0x60dd40);
 
   if (!pg) buildPlayer();
   pg.position.set(LANES[1],0,0);
-  pg.scale.set(1,1,1);
-  pg.visible=true;
+  pg.scale.set(1,1,1); pg.visible=true;
 
-  camera.position.set(0,9,-18);
-  camera.lookAt(0,3,30);
+  buildTrex();
+
+  // Camera: slightly lower & wider to show T-Rex in far background
+  camera.position.set(0, 8.5, -20);
+  camera.lookAt(0, 3, 30);
 
   for (let i=0;i<SEGS_AHEAD;i++) makeSegment(i*SEG_LEN - SEG_LEN*2);
 
   document.getElementById('overlay').classList.add('hidden');
   document.getElementById('ctrl').classList.remove('hidden');
-  showBanner('🚉 鯖江駅前 — SABAE STATION');
+  showBanner('🦕 恐竜遺跡 — DINO RUINS — RUN!');
 
-  clock.getDelta(); // reset
+  clock.getDelta();
   running = true;
 }
 
@@ -485,103 +796,93 @@ function animate() {
 
   if (!running) { renderer.render(scene, camera); return; }
 
-  // Speed & distance
-  speed = BASE_SPEED + dist * .0025;
+  speed = BASE_SPEED + dist*.0025;
   const move = speed * dt;
-  dist += move;
-  pz   += move;
+  dist += move; pz += move;
 
-  // Lane lerp
-  px += (LANES[lane] - px) * Math.min(dt*13, 1);
+  px += (LANES[lane]-px) * Math.min(dt*13, 1);
 
-  // Jump / gravity
   if (jumping) {
-    pvy -= GRAVITY * dt;
-    py  += pvy * dt;
-    if (py <= 0) { py=0; pvy=0; jumping=false; }
+    pvy -= GRAVITY*dt; py += pvy*dt;
+    if (py<=0) { py=0; pvy=0; jumping=false; }
   }
+  if (sliding) { slideT-=dt; if(slideT<=0) sliding=false; }
 
-  // Slide
-  if (sliding) { slideT -= dt; if (slideT<=0) { sliding=false; } }
-
-  // Place player
   pg.position.set(px, py, pz);
-  const tsy = sliding ? .52 : 1;
-  const tsz = sliding ? 1.7 : 1;
-  pg.scale.y += (tsy - pg.scale.y) * dt * 12;
-  pg.scale.z += (tsz - pg.scale.z) * dt * 12;
+  const tsy = sliding?.52:1, tsz=sliding?1.7:1;
+  pg.scale.y += (tsy-pg.scale.y)*dt*12;
+  pg.scale.z += (tsz-pg.scale.z)*dt*12;
 
-  // Leg animation
-  if (!sliding && !jumping) {
-    legT += dt * speed * .38;
-    leftLeg.rotation.x  =  Math.sin(legT) * .65;
-    rightLeg.rotation.x = -Math.sin(legT) * .65;
+  if (!sliding&&!jumping) {
+    legT += dt*speed*.38;
+    leftLeg.rotation.x  =  Math.sin(legT)*.65;
+    rightLeg.rotation.x = -Math.sin(legT)*.65;
   } else {
-    leftLeg.rotation.x  += (0-leftLeg.rotation.x)  * dt*9;
-    rightLeg.rotation.x += (0-rightLeg.rotation.x) * dt*9;
+    leftLeg.rotation.x  += (0-leftLeg.rotation.x)*dt*9;
+    rightLeg.rotation.x += (0-rightLeg.rotation.x)*dt*9;
   }
 
-  // Drop shadow
   const sh = pg.userData.shadow;
-  sh.scale.setScalar(1 - py*.03);
-  sh.material.opacity = Math.max(.05, .28 - py*.015);
+  sh.scale.setScalar(1-py*.03);
+  sh.material.opacity = Math.max(.05,.28-py*.015);
 
-  // Camera follow
-  camX += (px * .32 - camX) * dt * 6;
-  camera.position.set(camX, py*.25 + 9, pz - 18);
-  camera.lookAt(px*.18, py*.4+3.5, pz + 38);
-  sun.position.set(px+5, 20, pz-10);
+  // Camera — pull back slightly when T-Rex is close for drama
+  const trexDrama = Math.max(0, (28-trexGap)/28); // 0→1 as raptor closes in
+  const camDist = 20 + trexDrama * 4;
+  const camH    = 8.5 + trexDrama * 2;
+  camX += (px*.32-camX)*dt*6;
+  camera.position.set(camX, py*.25+camH, pz-camDist);
+  camera.lookAt(px*.18, py*.4+3.5, pz+34);
+  sun.position.set(px+8, 25, pz-12);
 
-  // Rotate lenses
   const t = Date.now()*.003;
   collectibles.forEach(c => {
     c.rotation.z += dt*2.5;
-    c.position.y  = 1.25 + Math.sin(t + c.position.z*.3)*.2;
+    c.position.y = 1.25+Math.sin(t+c.position.z*.3)*.2;
   });
 
-  // Particles
   particles = particles.filter(p => {
     p.userData.life -= dt;
-    if (p.userData.life <= 0) { scene.remove(p); return false; }
-    p.position.x += p.userData.vx * dt;
-    p.position.y += p.userData.vy * dt;
+    if (p.userData.life<=0) { scene.remove(p); return false; }
+    p.position.x += p.userData.vx*dt;
+    p.position.y += p.userData.vy*dt;
     p.userData.vy -= 16*dt;
-    p.position.z += p.userData.vz * dt;
-    p.material.opacity = p.userData.life / p.userData.maxLife;
+    p.position.z += p.userData.vz*dt;
+    p.material.opacity = p.userData.life/p.userData.maxLife;
     return true;
   });
 
-  // Cull obstacles
   obstacles = obstacles.filter(o => {
-    if (o.position.z < pz - 15) { scene.remove(o); return false; }
+    if (o.position.z < pz-15) { scene.remove(o); return false; }
     return true;
   });
 
-  // Timers
-  laneCD  = Math.max(0, laneCD - dt);
-  invTimer = Math.max(0, invTimer - dt);
-  if (invTimer>0) pg.visible = Math.floor(Date.now()/90)%2===0;
-  else            pg.visible = true;
+  laneCD   = Math.max(0, laneCD-dt);
+  invTimer = Math.max(0, invTimer-dt);
+  pg.visible = invTimer>0 ? Math.floor(Date.now()/90)%2===0 : true;
 
-  // Stage
   stageDist += move;
   if (stageDist > STAGE_DIST) {
-    stageDist = 0;
-    stageIdx  = (stageIdx+1) % STAGES.length;
+    stageDist=0; stageIdx=(stageIdx+1)%STAGES.length;
     applyStage(STAGES[stageIdx]);
+    // Update lighting for non-jungle stages
+    if (!STAGES[stageIdx].jungle) {
+      sun.color.setHex(0xffe8c0);
+      fillLight.color.setHex(0x8898ff);
+    } else {
+      sun.color.setHex(0xffe090);
+      fillLight.color.setHex(0x60dd40);
+    }
     showBanner(`${STAGES[stageIdx].name} — ${STAGES[stageIdx].sub}`);
   }
 
-  // Track
   refreshTrack();
-
-  // Collisions
+  updateTrex(dt, move);
   collide();
 
-  // UI
-  score = Math.floor(dist * 12);
-  document.getElementById('score').textContent = 'SCORE ' + score.toLocaleString();
-  document.getElementById('lenses').textContent = '👓 LENSES ' + lensCount;
+  score = Math.floor(dist*12);
+  document.getElementById('score').textContent  = 'SCORE ' + score.toLocaleString();
+  document.getElementById('lenses').textContent = '🦕 LENS ' + lensCount;
   document.getElementById('spd').textContent    = 'SPEED ' + Math.floor(speed).toString().padStart(3,' ');
 
   renderer.render(scene, camera);
