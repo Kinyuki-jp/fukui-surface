@@ -191,6 +191,74 @@ canvas{display:block}
 #db-down {grid-column:2;grid-row:3}
 
 .hidden{display:none!important}
+
+/* ── MOVING SCAN PULSE ─────────────── */
+#scanpulse{
+  position:fixed;inset:0;pointer-events:none;z-index:56;overflow:hidden;
+}
+#scanpulse::after{
+  content:'';position:absolute;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,255,.12) 30%,rgba(0,255,255,.08) 70%,transparent);
+  animation:scanmove 5s linear infinite;
+}
+@keyframes scanmove{from{top:-2px}to{top:100%}}
+
+/* ── SCREEN SHAKE ──────────────────── */
+@keyframes camshake{
+  0%,100%{transform:none}
+  20%{transform:translate(-2px,1px) skewX(-.3deg)}
+  40%{transform:translate(2px,-1px) skewX(.2deg)}
+  60%{transform:translate(-1px,2px)}
+  80%{transform:translate(1px,-1px) skewX(.1deg)}
+}
+body.camshake{animation:camshake .12s linear infinite}
+
+/* ── CORNER BRACKETS ───────────────── */
+.cnr{
+  position:fixed;width:24px;height:24px;
+  pointer-events:none;border-style:solid;
+  border-color:rgba(0,255,255,.75);z-index:58;
+  box-shadow:0 0 6px rgba(0,255,255,.5),0 0 16px rgba(0,255,255,.15);
+}
+#cnr-tl{top:8px;left:8px;  border-width:2px 0 0 2px;}
+#cnr-tr{top:8px;right:8px; border-width:2px 2px 0 0;}
+#cnr-bl{bottom:8px;left:8px;  border-width:0 0 2px 2px;}
+#cnr-br{bottom:8px;right:8px; border-width:0 2px 2px 0;}
+
+/* ── DANGER VIGNETTE PULSE ─────────── */
+#dpulse{
+  position:fixed;inset:0;pointer-events:none;z-index:53;opacity:0;
+  background:radial-gradient(ellipse at center,transparent 42%,rgba(200,0,0,.5) 100%);
+}
+@keyframes rpulse{0%,100%{opacity:0}50%{opacity:1}}
+#dpulse.on{animation:rpulse .45s ease-in-out infinite}
+
+/* ── CYBER GRID OVERLAY ─────────────── */
+#gridoverlay{
+  position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0;
+  transition:opacity 1.2s;
+  background-image:
+    linear-gradient(rgba(0,255,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,255,255,.022) 1px,transparent 1px);
+  background-size:72px 72px;
+}
+#gridoverlay.on{opacity:1}
+
+/* ── T-REX: chromatic aberration on danger ── */
+#trex-wrap img{transition:filter .3s}
+#trex-wrap.danger img{
+  filter:contrast(1.5) saturate(1.4) brightness(.82)
+    drop-shadow(0 0 18px rgba(255,30,0,.85))
+    drop-shadow(5px 0 0 rgba(255,0,180,.4))
+    drop-shadow(-5px 0 0 rgba(0,255,255,.3));
+}
+
+/* ── HUD SEPARATOR ───────────────────── */
+#hudline{
+  position:fixed;top:62px;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,255,.3) 25%,rgba(0,255,255,.3) 75%,transparent);
+  pointer-events:none;z-index:59;
+}
 </style>
 </head>
 <body>
@@ -200,6 +268,16 @@ canvas{display:block}
 <div id="scanlines"></div>
 <div id="vignette"></div>
 <div id="speedlines"></div>
+
+<!-- Cyber enhancement layers -->
+<div id="scanpulse"></div>
+<div id="dpulse"></div>
+<div id="gridoverlay"></div>
+<div id="hudline"></div>
+<div class="cnr" id="cnr-tl"></div>
+<div class="cnr" id="cnr-tr"></div>
+<div class="cnr" id="cnr-bl"></div>
+<div class="cnr" id="cnr-br"></div>
 
 <!-- T-Rex chaser overlay (rises from bottom) -->
 <div id="trex-wrap">
@@ -264,7 +342,7 @@ const TREX_HIT_GAIN   = 14;
 
 const STAGES = [
   {name:'🦕 恐竜遺跡', sub:'DINO RUINS — FUKUIRAPTOR ZONE',
-   sky:0x0a1808, fog:0x122010, track:0x7a7060, wall:0x504838, bld:0x304028, acc:0xffdd44, jungle:true},
+   sky:0x1a3820, fog:0x253820, track:0x7a7060, wall:0x504838, bld:0x304028, acc:0xffdd44, jungle:true},
   {name:'🚉 鯖江駅前', sub:'SABAE STATION',
    sky:0x060c18, fog:0x0a1428, track:0x1e2a38, wall:0x283848, bld:0x324458, acc:0x00ffcc, jungle:false},
   {name:'🌸 西山公園', sub:'NISHIYAMA PARK',
@@ -279,7 +357,7 @@ const STAGES = [
 //  THREE.JS SETUP
 // ═══════════════════════════════════════════
 const canvas   = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:true});
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -295,14 +373,14 @@ addEventListener('resize', ()=>{
   camera.updateProjectionMatrix();
 });
 
-const ambient  = new THREE.AmbientLight(0xffffff, 0.45);
+const ambient  = new THREE.AmbientLight(0xffffff, 0.80);
 scene.add(ambient);
-const sun = new THREE.DirectionalLight(0xffe090, 1.5);
+const sun = new THREE.DirectionalLight(0xffe090, 2.2);
 sun.castShadow = true;
 Object.assign(sun.shadow.camera,{near:.1,far:140,left:-30,right:30,top:30,bottom:-30});
 sun.shadow.mapSize.set(1024,1024);
 scene.add(sun);
-const hemi = new THREE.HemisphereLight(0x60ff40, 0x3a2810, 0.4);
+const hemi = new THREE.HemisphereLight(0x60ff40, 0x3a2810, 0.65);
 scene.add(hemi);
 
 // ═══════════════════════════════════════════
@@ -326,12 +404,14 @@ let bldMat   = new THREE.MeshLambertMaterial({color:0x304028});
 
 function applyStage(st){
   scene.background = new THREE.Color(st.sky);
-  scene.fog        = new THREE.FogExp2(st.fog, 0.013);
+  scene.fog        = new THREE.FogExp2(st.fog, 0.007);
   trackMat.color.setHex(st.track);
   wallMat.color.setHex(st.wall);
   bldMat.color.setHex(st.bld);
   if(st.jungle){ sun.color.setHex(0xffe090); hemi.color.setHex(0x60ff40); }
   else         { sun.color.setHex(0xaaccff); hemi.color.setHex(0x4488ff); }
+  const go=document.getElementById('gridoverlay');
+  if(go) go.classList.toggle('on',!st.jungle);
 }
 
 // ═══════════════════════════════════════════
@@ -482,23 +562,30 @@ function updateTrex(dt, move){
     // Scale up as raptor approaches
     const sc=Math.max(.6, Math.min(2.5, (65-trexGap)/20));
     trexBillboard.scale.setScalar(sc);
-    trexBillboard.visible=trexGap<48;
+    trexBillboard.visible=trexGap<55;
   }
 
   // ── CSS overlay: image rises from bottom as raptor closes in
   const wrap=document.getElementById('trex-wrap');
-  if(trexGap>40){
+  if(trexGap>52){
     wrap.style.height='0'; wrap.style.opacity='0';
     wrap.classList.remove('danger');
   } else {
-    const t=Math.max(0,Math.min(1,(40-trexGap)/40));
-    const hPct=Math.floor(t*92);
-    const op=(t*.75).toFixed(2);
+    const t=Math.max(0,Math.min(1,(52-trexGap)/52));
+    const hPct=Math.floor(Math.pow(t,.65)*96);
+    const op=(Math.pow(t,.5)*.9).toFixed(2);
     wrap.style.height=hPct+'vh';
     wrap.style.opacity=op;
     if(trexGap<15) wrap.classList.add('danger');
     else           wrap.classList.remove('danger');
   }
+
+  // ── Danger vignette pulse (red edge)
+  const dp=document.getElementById('dpulse');
+  if(dp){ if(trexGap<22) dp.classList.add('on'); else dp.classList.remove('on'); }
+
+  // ── Screen shake when raptor extremely close
+  document.body.classList.toggle('camshake', trexGap<10);
 
   // ── Danger bar (top)
   const pct=Math.max(0,Math.min(100,((TREX_START_GAP-trexGap)/TREX_START_GAP)*100));
@@ -827,6 +914,9 @@ function showBanner(txt){
 }
 function die(){
   running=false;
+  document.body.classList.remove('camshake');
+  const dp2=document.getElementById('dpulse');
+  if(dp2){ dp2.classList.remove('on'); dp2.style.opacity='0'; }
   document.getElementById('trex-wrap').style.height='0';
   document.getElementById('trex-wrap').style.opacity='0';
   document.getElementById('dangertxt').classList.remove('show');

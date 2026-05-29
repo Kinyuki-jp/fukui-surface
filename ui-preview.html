@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+/* Orbitron fallback — just use the stack already defined in body */
+</style>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a3a18;width:1280px;height:800px;overflow:hidden;font-family:'Courier New',monospace;position:relative}
+
+/* BG = jungle screenshot */
+#bg{position:absolute;inset:0;background:url('screenshot_jungle.png') center/cover;filter:brightness(.55) saturate(1.2)}
+
+#scanlines{position:absolute;inset:0;z-index:2;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,255,.02) 3px,rgba(0,255,255,.02) 4px)}
+#vignette{position:absolute;inset:0;z-index:3;
+  background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,.75) 100%)}
+
+/* T-Rex overlay */
+#trex{position:absolute;bottom:0;left:0;right:0;height:58%;z-index:4;overflow:hidden}
+#trex img{width:100%;object-fit:cover;object-position:top center;
+  filter:contrast(1.3) saturate(1.1) brightness(.85)}
+#trex::after{content:'';position:absolute;inset:0;
+  box-shadow:inset 0 0 80px rgba(255,0,0,.5)}
+
+/* Danger bar */
+#dangerbar{position:absolute;top:0;left:0;width:72%;height:3px;z-index:10;
+  background:linear-gradient(90deg,#ff2200,#ff8800);
+  box-shadow:0 0 14px #ff2200}
+
+/* HUD */
+#hud{position:absolute;top:0;left:0;right:0;padding:14px 20px;
+  display:flex;justify-content:space-between;z-index:10}
+#score{font-size:32px;font-weight:900;letter-spacing:3px;color:#00ffff;
+  text-shadow:0 0 8px #00ffff,0 0 24px #0088ff,0 0 50px #0033ff}
+#lenses{font-size:13px;margin-top:5px;letter-spacing:2px;color:#ff00cc;
+  text-shadow:0 0 8px #ff00cc}
+#gtitle{font-size:15px;font-weight:900;letter-spacing:4px;color:#00ffff;
+  text-align:right;text-shadow:0 0 10px #00ffff}
+#spd{font-size:12px;margin-top:6px;letter-spacing:2px;color:#aaff00;
+  text-align:right;text-shadow:0 0 8px #aaff00}
+
+/* Danger text */
+#dangertxt{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:20px;font-weight:900;letter-spacing:4px;color:#ff2200;
+  text-shadow:0 0 20px #ff0000,0 0 40px #ff0000;z-index:10}
+
+/* Banner */
+#banner{position:absolute;bottom:76px;left:50%;transform:translateX(-50%);
+  background:rgba(0,10,30,.88);border:1px solid rgba(0,255,255,.5);
+  border-radius:3px;padding:8px 26px;color:#00ffff;font-size:13px;
+  font-weight:700;letter-spacing:3px;z-index:10;
+  box-shadow:0 0 20px rgba(0,255,255,.35)}
+
+/* D-pad */
+#dpad{position:absolute;bottom:20px;right:20px;z-index:10;
+  display:grid;grid-template-columns:56px 56px 56px;
+  grid-template-rows:56px 56px 56px;gap:5px}
+.db{width:56px;height:56px;background:rgba(0,255,255,.1);
+  border:1.5px solid rgba(0,255,255,.5);border-radius:6px;
+  color:#00ffff;font-size:20px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 12px rgba(0,255,255,.3)}
+#db-up   {grid-column:2;grid-row:1}
+#db-left {grid-column:1;grid-row:2}
+#db-mid  {grid-column:2;grid-row:2;opacity:.25;font-size:10px}
+#db-right{grid-column:3;grid-row:2}
+#db-down {grid-column:2;grid-row:3}
+
+/* Speed lines */
+#speedlines{position:absolute;inset:0;z-index:5;
+  background:radial-gradient(ellipse at center,transparent 28%,
+    rgba(0,80,255,.0) 40%,rgba(0,80,255,.07) 70%,rgba(0,20,100,.2) 100%)}
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="speedlines"></div>
+<div id="trex"><img src="assets/trex.jpg"></div>
+<div id="dangerbar"></div>
+
+<div id="hud">
+  <div>
+    <div id="score">002279</div>
+    <div id="lenses">🦕 LENS × 7</div>
+  </div>
+  <div>
+    <div id="gtitle">FUKUI SURFACE</div>
+    <div id="spd">SPD 022</div>
+  </div>
+</div>
+
+<div id="dangertxt">⚠ FUKUIRAPTOR ⚠</div>
+<div id="banner">🦕 DINO RUINS — FUKUIRAPTOR ZONE</div>
+
+<div id="dpad">
+  <div class="db" id="db-up">▲</div>
+  <div class="db" id="db-left">◀</div>
+  <div class="db" id="db-mid">●</div>
+  <div class="db" id="db-right">▶</div>
+  <div class="db" id="db-down">▼</div>
+</div>
+</body>
+</html>
