@@ -463,14 +463,31 @@ let bldMat   = new THREE.MeshLambertMaterial({color:0x304028});
 // Vertical gradient sky (zenith → horizon) baked to a CanvasTexture — far more natural than a flat fill
 let _skyTex = null;
 function makeSkyGradient(topHex, botHex){
-  const cv = document.createElement('canvas'); cv.width = 8; cv.height = 256;
+  const W=360, H=256;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const cx = cv.getContext('2d');
   const top = new THREE.Color(topHex), bot = new THREE.Color(botHex);
-  const g = cx.createLinearGradient(0,0,0,256);
+  const g = cx.createLinearGradient(0,0,0,H);
   g.addColorStop(0.0, '#'+top.getHexString());
   g.addColorStop(0.62,'#'+top.clone().lerp(bot,0.55).getHexString());
   g.addColorStop(1.0, '#'+bot.getHexString());
-  cx.fillStyle = g; cx.fillRect(0,0,8,256);
+  cx.fillStyle = g; cx.fillRect(0,0,W,H);
+  // Soft fair-weather clouds in the upper sky (blurred puffs)
+  cx.save();
+  if('filter' in cx) cx.filter = 'blur(6px)';
+  for(let i=0;i<7;i++){
+    const cyc = H*(0.10 + Math.random()*0.34);
+    const cxc = Math.random()*W;
+    const cw  = 34 + Math.random()*66, ch = 9 + Math.random()*14;
+    cx.fillStyle = 'rgba(255,255,255,'+(0.30+Math.random()*0.28).toFixed(2)+')';
+    cx.beginPath(); cx.ellipse(cxc,cyc,cw,ch,0,0,6.2832); cx.fill();
+    for(let j=0;j<3;j++){
+      cx.beginPath();
+      cx.ellipse(cxc+(Math.random()-0.5)*cw, cyc-ch*0.4*Math.random(), cw*0.42, ch*0.85, 0,0,6.2832);
+      cx.fill();
+    }
+  }
+  cx.restore();
   const tex = new THREE.CanvasTexture(cv);
   tex.encoding = THREE.sRGBEncoding;
   tex.minFilter = THREE.LinearFilter;
@@ -795,9 +812,9 @@ function buildLandmarks(){
 const colMat  =new THREE.MeshLambertMaterial({color:0x9a8a72});
 const mossMat =new THREE.MeshLambertMaterial({color:0x2a6a1a});
 const trnkMat =new THREE.MeshLambertMaterial({color:0x3a2510});
-const leafA   =new THREE.MeshLambertMaterial({color:0x1a5a10});
-const leafB   =new THREE.MeshLambertMaterial({color:0x2a8020});
-const fernMat =new THREE.MeshLambertMaterial({color:0x1e7a14});
+const leafA   =new THREE.MeshLambertMaterial({color:0x35592a});
+const leafB   =new THREE.MeshLambertMaterial({color:0x4f7a3e});
+const fernMat =new THREE.MeshLambertMaterial({color:0x4a7236});
 const wtrMat  =new THREE.MeshBasicMaterial({color:0x70b8ff,transparent:true,opacity:.55,side:THREE.DoubleSide});
 const stoneMat=new THREE.MeshLambertMaterial({color:0x7a7060});
 const crkMat  =new THREE.MeshBasicMaterial({color:0x2a2018});
