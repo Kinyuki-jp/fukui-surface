@@ -353,6 +353,10 @@ const STAGE_DIST = 900;
 const CAM_BACK        = 22;   // camera distance behind player
 const MTN_RANGE       = 420;  // mountain ridge tiling length
 
+// ── Rolling Fukui hills: gentle slopes the runner climbs & descends (Subway-Surfers feel)
+const HILL_A1 = 3.2, HILL_W1 = 155, HILL_A2 = 1.6, HILL_W2 = 52;
+function groundY(z){ return Math.sin(z/HILL_W1)*HILL_A1 + Math.sin(z/HILL_W2 + 1.3)*HILL_A2; }
+
 const TREX_START_GAP  = 60;
 const TREX_GAIN_RATE  = 0.05;
 const TREX_HIT_GAIN   = 14;
@@ -562,7 +566,7 @@ function updateTrex(dt, move){
 
   if(dino){
     const bob=Math.abs(Math.sin(trexLegT))*0.28;
-    dino.position.set(dinoX, bob, visZ);
+    dino.position.set(dinoX, bob+groundY(visZ), visZ);
     // Base 3/4 yaw reveals the head, jaws & running stride (reads as a dinosaur,
     // not just a back) + a little tracking toward the player's lane.
     dino.rotation.y=0.52 + Math.atan2(px-dinoX, 6)*0.4;
@@ -580,7 +584,7 @@ function updateTrex(dt, move){
     }
   }
   if(trexShadow){
-    trexShadow.position.set(dinoX,0.05,visZ);
+    trexShadow.position.set(dinoX,0.05+groundY(visZ),visZ);
     const ss=1.6+near*1.8;
     trexShadow.scale.setScalar(ss);
     trexShadow.material.opacity=0.22+near*0.26;
@@ -748,10 +752,15 @@ const azaleaMats=[0xff4d8d,0xff79b0,0xe83a7a,0xffffff,0xcc4df0,0xff2e88].map(c=>
 
 function makeJungle(z){
   const g=new THREE.Group(); g.userData.z=z;
+  // Ride the rolling hills: segment sits at the average height of its two ends;
+  // the path tilts to chord the slope so it climbs / descends seamlessly.
+  const gyA=groundY(z), gyB=groundY(z+SEG_LEN);
+  const gy=(gyA+gyB)/2, pitch=Math.asin(Math.max(-1,Math.min(1,(gyA-gyB)/SEG_LEN)));
+  g.position.y=gy; g.userData.gy=gy;
 
   // Stone path
   const fl=new THREE.Mesh(new THREE.PlaneGeometry(11,SEG_LEN),stoneMat);
-  fl.rotation.x=-Math.PI/2; fl.position.set(0,0,z+SEG_LEN/2);
+  fl.rotation.x=-Math.PI/2+pitch; fl.position.set(0,0,z+SEG_LEN/2);
   fl.receiveShadow=true; g.add(fl);
   // Tile grid
   for(let ti=0;ti<5;ti++){
@@ -760,7 +769,7 @@ function makeJungle(z){
   }
   for(const xi of[-3.5,0,3.5]){
     const vl=new THREE.Mesh(new THREE.PlaneGeometry(.07,SEG_LEN),crkMat);
-    vl.rotation.x=-Math.PI/2; vl.position.set(xi,.01,z+SEG_LEN/2); g.add(vl);
+    vl.rotation.x=-Math.PI/2+pitch; vl.position.set(xi,.01,z+SEG_LEN/2); g.add(vl);
   }
   // Random cracks
   for(let cr=0;cr<4;cr++){
@@ -925,7 +934,7 @@ function spawnObs(z){
     if(type===0){
       const lane=Math.floor(Math.random()*3);
       obs=new THREE.Mesh(new THREE.BoxGeometry(2.8,2.6,1.3),M.obsRed);
-      obs.position.set(LANES[lane],1.3,sz); obs.userData={type:'block',lane};
+      obs.position.set(LANES[lane],1.3+groundY(sz),sz); obs.userData={type:'block',lane};
     } else if(type===1){
       const lane=Math.floor(Math.random()*3);
       obs=new THREE.Group();
@@ -934,7 +943,7 @@ function spawnObs(z){
       const pL=new THREE.Mesh(new THREE.BoxGeometry(.2,1.5,.2),M.obsOrange);
       pL.position.set(-1.2,.75,0);
       obs.add(bar,pL,pL.clone()); obs.children[2].position.set(1.2,.75,0);
-      obs.position.set(LANES[lane],0,sz); obs.userData={type:'barrier',lane};
+      obs.position.set(LANES[lane],groundY(sz),sz); obs.userData={type:'barrier',lane};
     } else {
       const safe=Math.floor(Math.random()*3);
       obs=new THREE.Group();
@@ -943,7 +952,7 @@ function spawnObs(z){
         const blk=new THREE.Mesh(new THREE.BoxGeometry(2.6,2.2,1.1),M.obsRed);
         blk.position.set(LANES[l],1.1,0); obs.add(blk);
       }
-      obs.position.set(0,0,sz); obs.userData={type:'multi',safe};
+      obs.position.set(0,groundY(sz),sz); obs.userData={type:'multi',safe};
     }
     obs.castShadow=true; scene.add(obs); obstacles.push(obs);
   }
@@ -1127,8 +1136,8 @@ function startGame(){
   buildMountains();
   buildLandmarks();
 
-  camera.position.set(0,9.5,-CAM_BACK);
-  camera.lookAt(0,4,30);
+  camera.position.set(0,9.5+groundY(0),-CAM_BACK);
+  camera.lookAt(0,4+groundY(30),30);
 
   for(let i=0;i<SEGS_AHEAD;i++){ const sz=i*SEG_LEN-SEG_LEN*2; makeSegment(sz); if(sz>=SEG_LEN) spawnLens(sz); }
 
@@ -1158,7 +1167,7 @@ function animate(){
   if(jumping){pvy-=GRAVITY*dt;py+=pvy*dt;if(py<=0){py=0;pvy=0;jumping=false;}}
   if(sliding){slideT-=dt;if(slideT<=0)sliding=false;}
 
-  pg.position.set(px,py,pz);
+  pg.position.set(px,py+groundY(pz),pz);
   pg.scale.y+=(( sliding?.52:1)-pg.scale.y)*dt*12;
   pg.scale.z+=(( sliding?1.7:1)-pg.scale.z)*dt*12;
 
@@ -1176,21 +1185,21 @@ function animate(){
 
   // Camera — steady chase-cam framing player + Fukuiraptor + valley
   camX+=(px*.30-camX)*dt*6;
-  camera.position.set(camX, 9.5+py*.2, pz-CAM_BACK);
-  camera.lookAt(px*.16, 4.0, pz+30);
+  camera.position.set(camX, 9.5+py*.2+groundY(pz), pz-CAM_BACK);
+  camera.lookAt(px*.16, 4.0+groundY(pz+30), pz+30);
   sun.position.set(px+10,30,pz+6);
 
   // Infinite mountain ridge — recycle peaks that fall behind
   for(const m of mountains){ if(m.position.z < pz-150) m.position.z += MTN_RANGE; }
   // Fukui landmarks (東尋坊・鯖江駅) — recycle ahead so they keep appearing
-  for(const l of landmarks){ if(l.position.z < pz-90) l.position.z += LM_RANGE; }
+  for(const l of landmarks){ if(l.position.z < pz-90) l.position.z += LM_RANGE; l.position.y=groundY(l.position.z); }
 
   const t=Date.now()*.003;
   collectibles.forEach(c=>{
     // Glasses groups spin on Y (stays flat); mesh toruses spin on Z
     if(c.isGroup) c.rotation.y+=dt*2.0;
     else c.rotation.z+=dt*2.5;
-    c.position.y=1.28+Math.sin(t+c.position.z*.3)*.22;
+    c.position.y=groundY(c.position.z)+1.28+Math.sin(t+c.position.z*.3)*.22;
   });
 
   particles=particles.filter(p=>{
