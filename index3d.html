@@ -640,6 +640,94 @@ function buildMountains(){
 }
 
 // ═══════════════════════════════════════════
+//  FUKUI LANDMARKS  (東尋坊・鯖江駅 — appear along the route)
+// ═══════════════════════════════════════════
+let landmarks=[];
+const LM_SPACING = 150;
+const LM_COUNT   = 6;
+const LM_RANGE   = LM_SPACING*LM_COUNT;
+
+// Canvas-texture name board so each landmark is clearly recognisable
+function makeSign(main, sub, w, h, bg, fg){
+  const c=document.createElement('canvas'); c.width=512; c.height=224;
+  const x=c.getContext('2d');
+  x.fillStyle=bg; x.fillRect(0,0,512,224);
+  x.lineWidth=12; x.strokeStyle=fg; x.strokeRect(10,10,492,204);
+  x.fillStyle=fg; x.textAlign='center'; x.textBaseline='middle';
+  x.font='bold 92px "Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif';
+  x.fillText(main, 256, 96);
+  x.font='bold 36px Arial,sans-serif';
+  x.fillText(sub, 256, 176);
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=4;
+  return new THREE.Mesh(new THREE.PlaneGeometry(w,h),
+    new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide}));
+}
+
+// 東尋坊 — columnar basalt cliffs dropping into the Sea of Japan
+const lmRock =new THREE.MeshLambertMaterial({color:0x5b554e,flatShading:true});
+const lmRockD=new THREE.MeshLambertMaterial({color:0x403b35,flatShading:true});
+const lmSea  =new THREE.MeshLambertMaterial({color:0x2f86d6,flatShading:true,transparent:true,opacity:.9});
+const lmFoam =new THREE.MeshBasicMaterial({color:0xeef8ff});
+function buildTojinbo(g, side){
+  const water=new THREE.Mesh(new THREE.PlaneGeometry(80,90), lmSea);
+  water.rotation.x=-Math.PI/2; water.position.set(side*46,0.35,0); g.add(water);
+  for(let i=0;i<16;i++){
+    const h=10+Math.random()*24, r=1.5+Math.random()*1.5;
+    const col=new THREE.Mesh(new THREE.CylinderGeometry(r,r*1.06,h,6), i%3?lmRock:lmRockD);
+    col.position.set(side*(18+Math.random()*18), h/2-1.2, (Math.random()-0.5)*34);
+    col.rotation.y=Math.random(); col.castShadow=true; g.add(col);
+    if(Math.random()>.5){
+      const fm=new THREE.Mesh(new THREE.SphereGeometry(1.5,6,5), lmFoam);
+      fm.scale.set(1.7,.4,1.7); fm.position.set(col.position.x, .55, col.position.z+r+1.2); g.add(fm);
+    }
+  }
+  const sign=makeSign('東尋坊','TOJINBO CLIFFS',13,5.4,'#16324f','#eaf6ff');
+  sign.position.set(side*10, 8.5, 0); sign.rotation.y = Math.PI + (side<0 ? -0.4 : 0.4); g.add(sign);
+}
+
+// 鯖江駅 — station gate spanning the track + platform building
+const lmPillar=new THREE.MeshLambertMaterial({color:0xb8c0c8,flatShading:true});
+const lmBeam  =new THREE.MeshLambertMaterial({color:0x2e6f55,flatShading:true});
+const lmBld   =new THREE.MeshLambertMaterial({color:0xe9e4d8,flatShading:true});
+const lmRoof  =new THREE.MeshLambertMaterial({color:0x3a5a8a,flatShading:true});
+const lmWin   =new THREE.MeshBasicMaterial({color:0x9fd6ff});
+function buildSabaeStation(g){
+  // Gate over the track (player runs underneath)
+  for(const sx of[-1,1]){
+    const p=new THREE.Mesh(new THREE.BoxGeometry(0.95,9.5,0.95), lmPillar);
+    p.position.set(sx*6.1,4.75,0); p.castShadow=true; g.add(p);
+  }
+  const beam=new THREE.Mesh(new THREE.BoxGeometry(13.4,1.4,1.5), lmBeam);
+  beam.position.set(0,9.6,0); g.add(beam);
+  const sign=makeSign('🚉 鯖江駅','SABAE STATION',9.5,3.6,'#0d3b2e','#ffffff');
+  sign.position.set(0,9.6,-0.95); sign.rotation.y=Math.PI; g.add(sign);  // face approaching player
+  // Platform building beside the track
+  const bld=new THREE.Mesh(new THREE.BoxGeometry(8,5.5,11), lmBld);
+  bld.position.set(12.5,2.75,0); bld.castShadow=true; g.add(bld);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(8.8,0.7,11.8), lmRoof);
+  roof.position.set(12.5,5.9,0); g.add(roof);
+  for(let cw=0;cw<3;cw++){
+    const w=new THREE.Mesh(new THREE.BoxGeometry(0.12,1.6,1.6), lmWin);
+    w.position.set(8.45, 2.6, -3.4+cw*3.4); g.add(w);
+  }
+  const bsign=makeSign('鯖江駅','SABAE',5,2,'#0d3b2e','#ffffff');
+  bsign.position.set(8.4,4.4,0); bsign.rotation.y=-Math.PI/2; g.add(bsign);
+}
+
+function buildLandmarks(){
+  landmarks.forEach(l=>scene.remove(l)); landmarks=[];
+  for(let i=0;i<LM_COUNT;i++){
+    const g=new THREE.Group();
+    const m=i%3;
+    if(m===0)      buildSabaeStation(g);
+    else if(m===1) buildTojinbo(g,-1);
+    else           buildTojinbo(g, 1);
+    g.position.z = 80 + i*LM_SPACING;
+    scene.add(g); landmarks.push(g);
+  }
+}
+
+// ═══════════════════════════════════════════
 //  JUNGLE SEGMENT
 // ═══════════════════════════════════════════
 const colMat  =new THREE.MeshLambertMaterial({color:0x9a8a72});
@@ -651,6 +739,11 @@ const fernMat =new THREE.MeshLambertMaterial({color:0x1e7a14});
 const wtrMat  =new THREE.MeshBasicMaterial({color:0x70b8ff,transparent:true,opacity:.55,side:THREE.DoubleSide});
 const stoneMat=new THREE.MeshLambertMaterial({color:0x7a7060});
 const crkMat  =new THREE.MeshBasicMaterial({color:0x2a2018});
+// ツツジ (azalea) flower palette — reused so segments don't leak materials
+const azaleaMats=[0xff4d8d,0xff79b0,0xe83a7a,0xffffff,0xcc4df0,0xff2e88].map(c=>{
+  const m=new THREE.MeshLambertMaterial({color:c,emissive:c,flatShading:true});
+  m.emissiveIntensity=0.28; return m;
+});
 
 function makeJungle(z){
   const g=new THREE.Group(); g.userData.z=z;
@@ -757,6 +850,20 @@ function makeJungle(z){
     }
     const lin=new THREE.Mesh(new THREE.BoxGeometry(6.5,1.1,1.2),colMat);
     lin.position.set(ax,ah+.55,az); g.add(lin);
+  }
+  // ツツジ (azaleas) — Sabae Nishiyama Park signature, line the path
+  for(const side of[-1,1]){
+    for(let a=0;a<2+Math.floor(Math.random()*2);a++){
+      const ax=side*(6.3+Math.random()*2.0), az=z+Math.random()*SEG_LEN;
+      const grn=new THREE.Mesh(new THREE.SphereGeometry(.95,7,6),fernMat);
+      grn.position.set(ax,.45,az); grn.scale.set(1.5,.7,1.5); g.add(grn);
+      const fm=azaleaMats[Math.floor(Math.random()*azaleaMats.length)];
+      for(let k=0;k<4;k++){
+        const pf=new THREE.Mesh(new THREE.SphereGeometry(.4+Math.random()*.2,6,5),fm);
+        pf.position.set(ax+(Math.random()-.5)*1.4,.72+Math.random()*.45,az+(Math.random()-.5)*1.4);
+        pf.scale.y=.82; g.add(pf);
+      }
+    }
   }
   scene.add(g); segments.push(g);
 }
@@ -1017,6 +1124,7 @@ function startGame(){
 
   buildTrex();
   buildMountains();
+  buildLandmarks();
 
   camera.position.set(0,9.5,-CAM_BACK);
   camera.lookAt(0,4,30);
@@ -1073,6 +1181,8 @@ function animate(){
 
   // Infinite mountain ridge — recycle peaks that fall behind
   for(const m of mountains){ if(m.position.z < pz-150) m.position.z += MTN_RANGE; }
+  // Fukui landmarks (東尋坊・鯖江駅) — recycle ahead so they keep appearing
+  for(const l of landmarks){ if(l.position.z < pz-90) l.position.z += LM_RANGE; }
 
   const t=Date.now()*.003;
   collectibles.forEach(c=>{

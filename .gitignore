@@ -1,6 +1,10 @@
 # Screenshots (dev only)
 screenshot3d*.png
 screenshot*.png
+shot_*.jpg
+
+# Local tooling
+.claude/
 
 # OS
 .DS_Store
