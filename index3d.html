@@ -6,6 +6,7 @@
 <title>FUKUI SURFACE 3D</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>window.THREE||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>');</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;overflow:hidden;font-family:'Orbitron','Courier New',monospace}
@@ -1237,6 +1238,27 @@ function animate(){
 // ── BOOT
 applyStage(STAGES[0]);
 animate();
+
+// Start button — robust binding so it works even if the inline onclick scope differs
+window.startGame = startGame;
+const _startBtn = document.getElementById('sbtn');
+if (_startBtn) _startBtn.addEventListener('click', startGame);
+</script>
+<script>
+  // Failsafe: if Three.js failed to load from every CDN, the main script never finished,
+  // leaving a dead Start button. Show a clear retry message instead.
+  window.addEventListener('load', function(){
+    if (typeof THREE === 'undefined') {
+      var ov = document.getElementById('overlay');
+      if (ov) {
+        ov.classList.remove('hidden');
+        ov.innerHTML =
+          '<h1 style="color:#ff5a5a">読み込みエラー</h1>' +
+          '<p style="max-width:440px;line-height:1.7;margin:14px 0">3Dエンジンを取得できませんでした。通信環境を確認して、ページを再読み込みしてください。</p>' +
+          '<button id="sbtn" onclick="location.reload()">&#8635; 再読み込み</button>';
+      }
+    }
+  });
 </script>
 </body>
 </html>
