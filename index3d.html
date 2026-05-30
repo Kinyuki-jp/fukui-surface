@@ -23,7 +23,7 @@ canvas{display:block}
 /* ── VIGNETTE ──────────────────────── */
 #vignette{
   position:fixed;inset:0;pointer-events:none;z-index:54;
-  background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.75) 100%);
+  background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.45) 100%);
 }
 
 /* ── T-REX OVERLAY ─────────────────── */
@@ -140,6 +140,13 @@ canvas{display:block}
 .osub{
   color:#336;font-size:13px;margin-bottom:32px;
   text-align:center;letter-spacing:2px;line-height:1.8;
+}
+.dino-photo{
+  width:min(54vw,300px);border-radius:10px;
+  border:2px solid rgba(255,90,50,.65);
+  box-shadow:0 0 34px rgba(255,70,25,.55);
+  filter:contrast(1.2) saturate(1.2);
+  margin-bottom:20px;
 }
 #sbtn{
   padding:15px 50px;font-size:16px;font-weight:900;
@@ -296,7 +303,7 @@ body.camshake{animation:camshake .12s linear infinite}
 <div id="hud">
   <div>
     <div id="score">000000</div>
-    <div id="lenses">🦕 LENS × 0</div>
+    <div id="lenses">👓 メガネ × 0</div>
   </div>
   <div id="rhud">
     <div id="gtitle">FUKUI SURFACE</div>
@@ -309,9 +316,10 @@ body.camshake{animation:camshake .12s linear infinite}
 
 <!-- Start / Game-over overlay -->
 <div id="overlay">
+  <img class="dino-photo" src="assets/trex.jpg" alt="">
   <h1>FUKUI<br>SURFACE</h1>
-  <div class="osub">恐竜王国・福井 × 鯖江の眼鏡<br>[ RUN FROM FUKUIRAPTOR ]</div>
-  <button id="sbtn" onclick="startGame()">▶ RUN</button>
+  <div class="osub">福井の渓谷を走れ・鯖江の眼鏡を集めろ<br>[ フクイラプトルから逃げろ ]</div>
+  <button id="sbtn" onclick="startGame()">▶ スタート</button>
   <div style="color:#223;margin-top:20px;font-size:10px;letter-spacing:2px">
     D-PAD / ARROWS &nbsp;·&nbsp; SPACE JUMP &nbsp;·&nbsp; ↓ SLIDE
   </div>
@@ -341,21 +349,23 @@ const JUMP_VY    = 15;
 const BASE_SPEED = 19;
 const STAGE_DIST = 900;
 
-const TREX_START_GAP  = 62;
-const TREX_GAIN_RATE  = 0.065;
+const CAM_BACK        = 22;   // camera distance behind player
+const MTN_RANGE       = 420;  // mountain ridge tiling length
+
+const TREX_START_GAP  = 60;
+const TREX_GAIN_RATE  = 0.05;
 const TREX_HIT_GAIN   = 14;
 
+// Fukui scenic stages — bright daytime nature, dinosaur valley, glasses
 const STAGES = [
-  {name:'🦕 恐竜遺跡', sub:'DINO RUINS — FUKUIRAPTOR ZONE',
-   sky:0x1a3820, fog:0x253820, track:0x7a7060, wall:0x504838, bld:0x304028, acc:0xffdd44, jungle:true},
-  {name:'🚉 鯖江駅前', sub:'SABAE STATION',
-   sky:0x060c18, fog:0x0a1428, track:0x1e2a38, wall:0x283848, bld:0x324458, acc:0x00ffcc, jungle:false},
-  {name:'🌸 西山公園', sub:'NISHIYAMA PARK',
-   sky:0x061006, fog:0x0a1a0a, track:0x182818, wall:0x203828, bld:0x284830, acc:0x88ff44, jungle:false},
-  {name:'👓 メガネ工房',sub:'GLASSES WORKSHOP',
-   sky:0x040810, fog:0x060c20, track:0x0c1428, wall:0x101e38, bld:0x182848, acc:0x44aaff, jungle:false},
-  {name:'🎌 福井祭り', sub:'FUKUI FESTIVAL',
-   sky:0x080004, fog:0x100208, track:0x100406, wall:0x200808, bld:0x401008, acc:0xff4400, jungle:false},
+  {name:'🦕 恐竜渓谷', sub:'KATSUYAMA DINO VALLEY',
+   sky:0x9fd4ff, fog:0xcfe9ff, track:0x8a7d63, wall:0x6a5d44, bld:0x4a6a3a, acc:0xffd23c},
+  {name:'🌸 西山公園', sub:'NISHIYAMA PARK · SABAE',
+   sky:0xffd6ea, fog:0xffe7f3, track:0x7a6a58, wall:0x6a6a4a, bld:0x4a7a44, acc:0xff79b0},
+  {name:'🌊 越前海岸', sub:'ECHIZEN COAST',
+   sky:0x7fcfe8, fog:0xcdeaf4, track:0x9a9276, wall:0x7a8a8a, bld:0x3a6a8a, acc:0x33d2ff},
+  {name:'⛩️ 永平寺', sub:'EIHEIJI MOUNTAINS',
+   sky:0x9fc0d4, fog:0xcfe0e8, track:0x6a6250, wall:0x5a5a42, bld:0x3a4a36, acc:0x55ffaa},
 ];
 
 // ═══════════════════════════════════════════
@@ -378,14 +388,14 @@ addEventListener('resize', ()=>{
   camera.updateProjectionMatrix();
 });
 
-const ambient  = new THREE.AmbientLight(0xffffff, 0.80);
+const ambient  = new THREE.AmbientLight(0xffffff, 0.95);
 scene.add(ambient);
-const sun = new THREE.DirectionalLight(0xffe090, 2.2);
+const sun = new THREE.DirectionalLight(0xfff0d0, 2.1);
 sun.castShadow = true;
 Object.assign(sun.shadow.camera,{near:.1,far:140,left:-30,right:30,top:30,bottom:-30});
 sun.shadow.mapSize.set(1024,1024);
 scene.add(sun);
-const hemi = new THREE.HemisphereLight(0x60ff40, 0x3a2810, 0.65);
+const hemi = new THREE.HemisphereLight(0xbfe3ff, 0x4a6a3a, 0.85);
 scene.add(hemi);
 
 // ═══════════════════════════════════════════
@@ -409,22 +419,17 @@ let bldMat   = new THREE.MeshLambertMaterial({color:0x304028});
 
 function applyStage(st){
   scene.background = new THREE.Color(st.sky);
-  scene.fog        = new THREE.FogExp2(st.fog, 0.007);
+  scene.fog        = new THREE.FogExp2(st.fog, 0.0038); // light haze so mountains show
   trackMat.color.setHex(st.track);
   wallMat.color.setHex(st.wall);
   bldMat.color.setHex(st.bld);
-  if(st.jungle){
-    sun.color.setHex(0xffe090); hemi.color.setHex(0x60ff40);
-    // Fossil/bone obstacle colors for dino stage
-    M.obsRed.color.setHex(0xc8b284);
-    M.obsOrange.color.setHex(0xa89060);
-  } else {
-    sun.color.setHex(0xaaccff); hemi.color.setHex(0x4488ff);
-    M.obsRed.color.setHex(0xff2222);
-    M.obsOrange.color.setHex(0xff7700);
-  }
+  // Bright daytime nature lighting; sky tints the hemisphere fill
+  sun.color.setHex(0xfff0d0);
+  hemi.color.setHex(st.sky);
+  M.obsRed.color.setHex(0xff3322);
+  M.obsOrange.color.setHex(0xff8800);
   const go=document.getElementById('gridoverlay');
-  if(go) go.classList.toggle('on',!st.jungle);
+  if(go) go.classList.remove('on');
 }
 
 // ═══════════════════════════════════════════
@@ -466,114 +471,172 @@ function buildPlayer(){
 // ═══════════════════════════════════════════
 //  T-REX  (procedural 3D + image overlay)
 // ═══════════════════════════════════════════
-// ── T-Rex: photo billboard + ground shadow (no box-model)
-let trexGroup=null, trexBillboard=null, trexShadow=null;
-let trexLegL,trexLegR,trexLegT=0; // trexLegL/R unused, kept for compat
+// ── Fukuiraptor: low-poly 3D chaser that runs behind the player
+let dino=null, trexShadow=null, trexLegT=0;
 let trexGap=TREX_START_GAP;
 
 function buildTrex(){
-  if(trexBillboard){scene.remove(trexBillboard);trexBillboard=null;}
-  if(trexShadow)   {scene.remove(trexShadow);   trexShadow=null;}
-  if(trexGroup)    {scene.remove(trexGroup);     trexGroup=null;}
+  if(dino){scene.remove(dino);dino=null;}
+  if(trexShadow){scene.remove(trexShadow);trexShadow=null;}
 
-  // Empty group for position reference
-  trexGroup=new THREE.Group();
-  scene.add(trexGroup);
+  dino=new THREE.Group();
+  const skin =new THREE.MeshLambertMaterial({color:0xc24a2c,flatShading:true});
+  const skinD=new THREE.MeshLambertMaterial({color:0x8f3320,flatShading:true});
+  const belly=new THREE.MeshLambertMaterial({color:0xe0b070});
+  const teeth=new THREE.MeshBasicMaterial({color:0xfff2e0});
+  const eyeM =new THREE.MeshBasicMaterial({color:0xffd000});
+  const dark =new THREE.MeshLambertMaterial({color:0x241008});
+  const P=(geo,mat,x,y,z,par)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=true;(par||dino).add(m);return m;};
 
-  // Ground shadow (ellipse under billboard)
+  // Torso + belly (head faces +z toward player; camera views it from behind)
+  P(new THREE.BoxGeometry(1.8,2.0,3.2),skin,0,2.7,0);
+  P(new THREE.BoxGeometry(1.5,1.0,2.9),belly,0,2.15,0.12);
+  // Dorsal spikes (bigger — clearer theropod silhouette)
+  for(let i=0;i<6;i++) P(new THREE.ConeGeometry(0.2,0.85,4),skinD,0,3.78,1.35-i*0.5);
+  // Curved neck rising from the shoulders toward a high, craned head
+  const neck1=P(new THREE.BoxGeometry(0.98,1.6,0.98),skin,0,3.55,1.3); neck1.rotation.x=-0.5;
+  const neck2=P(new THREE.BoxGeometry(0.9,1.35,0.92),skin,0,4.5,1.95); neck2.rotation.x=0.32;
+  // Head group — large, raised high & craned forward over the prey
+  const head=new THREE.Group(); head.position.set(0,5.15,2.25); head.rotation.x=0.42; dino.add(head);
+  P(new THREE.BoxGeometry(1.2,1.15,1.55),skin,0,0,0.1,head);        // skull
+  P(new THREE.BoxGeometry(0.98,0.62,1.5),skin,0,-0.26,1.2,head);    // snout
+  P(new THREE.BoxGeometry(0.55,0.4,0.6),skinD,0,0.55,0.05,head);    // brow ridge
+  const jaw=new THREE.Group(); jaw.position.set(0,-0.58,0.5); head.add(jaw);
+  P(new THREE.BoxGeometry(0.9,0.36,1.4),skinD,0,0,0.62,jaw);        // lower jaw
+  for(const sx of[-0.3,0,0.3]){ const t=P(new THREE.ConeGeometry(0.085,0.36,4),teeth,sx,-0.58,1.8,head); t.rotation.x=Math.PI; }
+  P(new THREE.SphereGeometry(0.21,9,7),eyeM, 0.5,0.36,0.55,head);
+  P(new THREE.SphereGeometry(0.21,9,7),eyeM,-0.5,0.36,0.55,head);
+  P(new THREE.SphereGeometry(0.1,6,5),dark, 0.57,0.36,0.7,head);
+  P(new THREE.SphereGeometry(0.1,6,5),dark,-0.57,0.36,0.7,head);
+  // Tiny arms
+  P(new THREE.BoxGeometry(0.2,0.75,0.2),skinD, 0.95,2.5,1.0);
+  P(new THREE.BoxGeometry(0.2,0.75,0.2),skinD,-0.95,2.5,1.0);
+  // Animated legs (hip + knee pivots)
+  function leg(side){
+    const hip=new THREE.Group(); hip.position.set(side*0.62,2.0,-0.2); dino.add(hip);
+    P(new THREE.BoxGeometry(0.55,1.7,0.62),skin,0,-0.75,0,hip);
+    const knee=new THREE.Group(); knee.position.set(0,-1.5,0); hip.add(knee);
+    P(new THREE.BoxGeometry(0.42,1.2,0.46),skinD,0,-0.55,0.08,knee);
+    P(new THREE.BoxGeometry(0.5,0.24,1.05),dark,0,-1.12,0.3,knee); // foot
+    return {hip,knee};
+  }
+  const legL=leg(-1), legR=leg(1);
+  // Animated tail (4 tapering segments)
+  const tail=new THREE.Group(); tail.position.set(0,2.7,-1.5); dino.add(tail);
+  let seg=tail; const tailSegs=[];
+  for(let i=0;i<4;i++){
+    const s=new THREE.Group(); s.position.set(0,0,-0.85);
+    const w=0.85-i*0.17;
+    P(new THREE.BoxGeometry(w,w,0.95),i%2?skin:skinD,0,0,-0.4,s);
+    seg.add(s); tailSegs.push(s); seg=s;
+  }
+  dino.userData={head,jaw,legL,legR,tailSegs};
+  scene.add(dino);
+
+  // Ground shadow
   trexShadow=new THREE.Mesh(
-    new THREE.CircleGeometry(3.5,20),
-    new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.42,depthWrite:false})
+    new THREE.CircleGeometry(2.6,22),
+    new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.4,depthWrite:false})
   );
-  trexShadow.rotation.x=-Math.PI/2;
-  trexShadow.position.y=.04;
+  trexShadow.rotation.x=-Math.PI/2; trexShadow.position.y=0.05;
   scene.add(trexShadow);
-
-  // Photo billboard — tall, upright, ground-level
-  const tex=new THREE.TextureLoader().load('assets/trex.jpg',
-    undefined,undefined,()=>{if(trexBillboard)trexBillboard.visible=false;}
-  );
-  trexBillboard=new THREE.Mesh(
-    new THREE.PlaneGeometry(22,32),
-    new THREE.MeshBasicMaterial({map:tex,transparent:false,depthWrite:false,side:THREE.FrontSide})
-  );
-  trexBillboard.renderOrder=2;
-  scene.add(trexBillboard);
 }
 
 function updateTrex(dt, move){
   if(!running) return;
 
-  // ── Close the gap
+  // ── Close the gap (slow gain; hitting an obstacle makes it lunge closer)
   trexGap-=move*TREX_GAIN_RATE;
-  trexGap=Math.max(trexGap,2.0);
-  trexLegT+=dt*5;
+  trexGap=Math.max(trexGap,1.4);
+  trexLegT+=dt*Math.max(7, speed*0.55);
 
-  const trexZ=pz-trexGap;
-  const bx=px*0.24; // billboard tracks player slightly
+  // Cinematic distance mapping: safe → far & small, danger → close & looming.
+  // Dino is always kept between the camera (pz-CAM_BACK) and the player (pz),
+  // so it is clearly visible chasing WITHOUT ever covering the screen.
+  const cg=Math.min(20, Math.max(3, trexGap));
+  const D=3 + (cg-3)/17 * 14;          // 3..17 units ahead of the camera
+  const visZ=pz - CAM_BACK + D;
+  const dinoX=px*0.5;
+  const near=Math.max(0, Math.min(1, (20-trexGap)/17)); // 0 far → 1 close
 
-  // ── 3D Photo billboard: always in front of camera, looms as raptor closes
-  // Camera is at pz-20. Billboard at pz-17 keeps it just in view behind player.
-  // Scale represents distance instead of Z position.
-  if(trexBillboard){
-    const sc=Math.max(0.18, Math.min(4.8, (64-trexGap)/16));
-    const bz=pz-17; // always between camera (pz-20) and player (pz)
-    const bh=16*sc; // billboard center height (bottom ~= ground)
-    const bob=trexGap<30 ? Math.abs(Math.sin(trexLegT*2.8))*sc*0.45 : 0;
-    trexBillboard.position.set(bx, bh+bob, bz);
-    // Upright billboard: rotate on Y only so it stays vertical
-    trexBillboard.rotation.y=Math.atan2(camera.position.x-bx, camera.position.z-bz);
-    trexBillboard.scale.setScalar(sc);
-    trexBillboard.visible=true;
+  if(dino){
+    const bob=Math.abs(Math.sin(trexLegT))*0.28;
+    dino.position.set(dinoX, bob, visZ);
+    // Base 3/4 yaw reveals the head, jaws & running stride (reads as a dinosaur,
+    // not just a back) + a little tracking toward the player's lane.
+    dino.rotation.y=0.52 + Math.atan2(px-dinoX, 6)*0.4;
+    const lunge=near*0.35;
+    dino.rotation.x=-lunge;                         // lean in when closing
+    const U=dino.userData;
+    if(U){
+      U.legL.hip.rotation.x= Math.sin(trexLegT)*0.85;
+      U.legR.hip.rotation.x=-Math.sin(trexLegT)*0.85;
+      U.legL.knee.rotation.x=Math.max(0, Math.cos(trexLegT))*0.7;
+      U.legR.knee.rotation.x=Math.max(0,-Math.cos(trexLegT))*0.7;
+      U.head.rotation.x=0.42 + Math.sin(trexLegT*0.5)*0.08 - lunge*0.55;
+      U.jaw.rotation.x=0.2 + (0.3+near*0.5)*(0.5+0.5*Math.sin(trexLegT*0.7)); // chomp
+      U.tailSegs.forEach((s,i)=>{ s.rotation.y=Math.sin(trexLegT*0.7 - i*0.6)*0.18; });
+    }
   }
-  // ── Ground shadow under billboard
   if(trexShadow){
-    const sc2=Math.max(0.12, Math.min(5.0, (64-trexGap)/14));
-    trexShadow.position.set(bx, 0.04, pz-17);
-    trexShadow.scale.setScalar(sc2);
-    trexShadow.material.opacity=Math.min(0.52, 0.06+sc2*0.08);
+    trexShadow.position.set(dinoX,0.05,visZ);
+    const ss=1.6+near*1.8;
+    trexShadow.scale.setScalar(ss);
+    trexShadow.material.opacity=0.22+near*0.26;
   }
 
-  // ── CSS overlay: T-Rex photo rises from bottom as raptor closes in
-  const wrap=document.getElementById('trex-wrap');
-  if(trexGap>52){
-    wrap.style.height='0'; wrap.style.opacity='0';
-    wrap.classList.remove('danger');
-  } else {
-    const t=Math.max(0,Math.min(1,(52-trexGap)/52));
-    const hPct=Math.floor(Math.pow(t,.6)*97);
-    const op=(Math.pow(t,.45)*.92).toFixed(2);
-    wrap.style.height=hPct+'vh';
-    wrap.style.opacity=op;
-    if(trexGap<15) wrap.classList.add('danger');
-    else           wrap.classList.remove('danger');
-  }
-
-  // ── Danger vignette pulse
+  // ── Danger feedback (vignette / shake / bar / text)
   const dp=document.getElementById('dpulse');
-  if(dp){ if(trexGap<22) dp.classList.add('on'); else dp.classList.remove('on'); }
+  if(dp){ if(trexGap<12) dp.classList.add('on'); else dp.classList.remove('on'); }
+  document.body.classList.toggle('camshake', trexGap<6);
 
-  // ── Screen shake when raptor about to catch player
-  document.body.classList.toggle('camshake', trexGap<10);
-
-  // ── Danger bar (top)
   const pct=Math.max(0,Math.min(100,((TREX_START_GAP-trexGap)/TREX_START_GAP)*100));
   document.getElementById('dangerbar').style.width=pct+'%';
 
-  // ── Danger text: alternates JP/EN
   const dtxt=document.getElementById('dangertxt');
-  if(trexGap<20){
+  if(trexGap<14){
     dtxt.classList.add('show');
     const fl=Math.floor(Date.now()/280)%2===0;
-    dtxt.style.opacity=trexGap<10?(fl?'1':'0.2'):'0.9';
+    dtxt.style.opacity=trexGap<6?(fl?'1':'0.25'):'0.9';
     const jp=Math.floor(Date.now()/900)%2===0;
-    dtxt.textContent=trexGap<8?'🦕 捕まった！ CAUGHT!'
-      : jp?'🦕 フクイラプトル 接近！':'⚠ FUKUIRAPTOR APPROACHING ⚠';
+    dtxt.textContent=trexGap<4?'🦖 捕まる！ CAUGHT!'
+      : jp?'🦖 フクイラプトル接近！':'⚠ FUKUIRAPTOR ⚠';
   } else {
     dtxt.classList.remove('show');
   }
 
-  if(trexGap<2.5) die();
+  if(trexGap<2.0) die();
+}
+
+// ═══════════════════════════════════════════
+//  MOUNTAINS  (distant Fukui ranges, infinite ridge)
+// ═══════════════════════════════════════════
+let mountains=[];
+const mtnMats=[0x4f6e42,0x42603a,0x5c7850,0x3c5a36].map(c=>new THREE.MeshLambertMaterial({color:c,flatShading:true}));
+const snowMat=new THREE.MeshLambertMaterial({color:0xeef4ff,flatShading:true});
+function buildMountains(){
+  mountains.forEach(m=>scene.remove(m)); mountains=[];
+  for(let z=-80; z<MTN_RANGE; z+=20){
+    for(const side of[-1,1]){
+      const h=22+Math.random()*28;
+      const r=11+Math.random()*9;
+      const x=side*(40+Math.random()*26);
+      const peak=new THREE.Mesh(
+        new THREE.ConeGeometry(r,h,5+Math.floor(Math.random()*3)),
+        mtnMats[Math.floor(Math.random()*mtnMats.length)]
+      );
+      peak.position.set(x, h/2-3, z+Math.random()*16);
+      peak.rotation.y=Math.random()*Math.PI;
+      scene.add(peak); mountains.push(peak);
+      // Snow cap on the tallest peaks (白山っぽさ)
+      if(h>34){
+        const cap=new THREE.Mesh(new THREE.ConeGeometry(r*0.45,h*0.3,6),snowMat);
+        cap.position.set(x, peak.position.y+h*0.34, peak.position.z);
+        cap.rotation.y=peak.rotation.y;
+        scene.add(cap); mountains.push(cap);
+      }
+    }
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -735,7 +798,7 @@ function makeCity(z){
 let segments=[], obstacles=[], collectibles=[], particles=[];
 function lastSegZ(){ return segments.length?segments[segments.length-1].userData.z+SEG_LEN:pz; }
 
-function makeSegment(z){ STAGES[stageIdx].jungle?makeJungle(z):makeCity(z); }
+function makeSegment(z){ makeJungle(z); } // lush Fukui valley for every stage
 
 function refreshTrack(){
   while(lastSegZ()<pz+SEGS_AHEAD*SEG_LEN){ const z=lastSegZ(); makeSegment(z); spawnObs(z); spawnLens(z); }
@@ -777,28 +840,29 @@ function spawnObs(z){
     obs.castShadow=true; scene.add(obs); obstacles.push(obs);
   }
 }
+// 鯖江の眼鏡コレクタブル — gold frames + glowing lenses, stands upright to run through
+const goldMat =new THREE.MeshLambertMaterial({color:0xffcc33,emissive:0x6a4a00});
+const lensFill=new THREE.MeshBasicMaterial({color:0x6effff,transparent:true,opacity:.55,side:THREE.DoubleSide});
 function spawnLens(z){
-  // 眼鏡型コレクタブル（鯖江の眼鏡をイメージ）
-  if(Math.random()<.72){
-    const lane=Math.floor(Math.random()*3), cnt=1+Math.floor(Math.random()*5);
+  if(Math.random()<.75){
+    const lane=Math.floor(Math.random()*3), cnt=2+Math.floor(Math.random()*4);
     for(let i=0;i<cnt;i++){
       const g=new THREE.Group();
-      const lGeo=new THREE.TorusGeometry(.22,.07,10,18);
-      // Left lens
-      const lL=new THREE.Mesh(lGeo, M.lens); lL.position.x=-.32;
-      // Right lens
-      const lR=new THREE.Mesh(lGeo.clone(), M.lens); lR.position.x=.32;
-      // Bridge
-      const br=new THREE.Mesh(new THREE.BoxGeometry(.36,.07,.07), M.lens);
-      // Left arm
-      const aL=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,.5), M.lens);
-      aL.position.set(-.57,0,-.22);
-      // Right arm
-      const aR=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,.5), M.lens);
-      aR.position.set(.57,0,-.22);
-      g.add(lL,lR,br,aL,aR);
-      g.rotation.x=Math.PI/2; // lie flat so visible from camera above
-      g.position.set(LANES[lane],1.28,z+9+i*2.6);
+      const R=0.38;
+      const ring=new THREE.TorusGeometry(R,0.1,10,22);
+      const fill=new THREE.CircleGeometry(R-0.03,20);
+      // Left + right lenses (rim + glowing fill)
+      const lL=new THREE.Mesh(ring,goldMat);        lL.position.x=-(R+0.05);
+      const fL=new THREE.Mesh(fill,lensFill);        fL.position.set(-(R+0.05),0,0.01);
+      const lR=new THREE.Mesh(ring.clone(),goldMat); lR.position.x= (R+0.05);
+      const fR=new THREE.Mesh(fill.clone(),lensFill);fR.position.set( (R+0.05),0,0.01);
+      // Bridge + temple arms
+      const br=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.09,0.09),goldMat);
+      const aL=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.09,0.7),goldMat); aL.position.set(-(2*R+0.05),0,-0.33);
+      const aR=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.09,0.7),goldMat); aR.position.set( (2*R+0.05),0,-0.33);
+      g.add(lL,fL,lR,fR,br,aL,aR);
+      // upright, facing the camera so the player runs straight through them
+      g.position.set(LANES[lane],1.55,z+9+i*3.0);
       g.userData.lane=lane;
       scene.add(g); collectibles.push(g);
     }
@@ -916,15 +980,16 @@ function die(){
   document.getElementById('dangertxt').classList.remove('show');
   const ov=document.getElementById('overlay');
   ov.innerHTML=`
+    <img class="dino-photo" src="assets/trex.jpg" alt="">
     <h1>GAME<br>OVER</h1>
     <div class="osub" style="color:#ff4422;font-size:16px;letter-spacing:3px;margin-bottom:12px">
-      — FUKUIRAPTOR GOT YOU —
+      — フクイラプトルに捕まった —
     </div>
     <div class="osub">
       SCORE &nbsp;<span style="color:#00ffff;font-size:22px">${score.toLocaleString()}</span><br>
-      🦕 LENS × ${lensCount}
+      👓 メガネ × ${lensCount}
     </div>
-    <button id="sbtn" onclick="startGame()">▶ TRY AGAIN</button>`;
+    <button id="sbtn" onclick="startGame()">▶ もう一度</button>`;
   ov.classList.remove('hidden');
   document.getElementById('ctrl').classList.add('hidden');
 }
@@ -951,15 +1016,16 @@ function startGame(){
   pg.scale.set(1,1,1);pg.visible=true;
 
   buildTrex();
+  buildMountains();
 
-  camera.position.set(0,8.5,-20);
-  camera.lookAt(0,3,30);
+  camera.position.set(0,9.5,-CAM_BACK);
+  camera.lookAt(0,4,30);
 
-  for(let i=0;i<SEGS_AHEAD;i++) makeSegment(i*SEG_LEN-SEG_LEN*2);
+  for(let i=0;i<SEGS_AHEAD;i++){ const sz=i*SEG_LEN-SEG_LEN*2; makeSegment(sz); if(sz>=SEG_LEN) spawnLens(sz); }
 
   document.getElementById('overlay').classList.add('hidden');
   document.getElementById('ctrl').classList.remove('hidden');
-  showBanner('🦕 DINO RUINS — RUN!');
+  showBanner(`${STAGES[0].name} — ${STAGES[0].sub}`);
 
   clock.getDelta();
   running=true;
@@ -999,12 +1065,14 @@ function animate(){
   sh.scale.setScalar(1-py*.03);
   sh.material.opacity=Math.max(.05,.28-py*.015);
 
-  // Camera — pull back when raptor is close
-  const drama=Math.max(0,(28-trexGap)/28);
-  camX+=(px*.32-camX)*dt*6;
-  camera.position.set(camX,py*.25+8.5+drama*3,pz-(20+drama*5));
-  camera.lookAt(px*.18,py*.4+3.5,pz+34);
-  sun.position.set(px+8,25,pz-12);
+  // Camera — steady chase-cam framing player + Fukuiraptor + valley
+  camX+=(px*.30-camX)*dt*6;
+  camera.position.set(camX, 9.5+py*.2, pz-CAM_BACK);
+  camera.lookAt(px*.16, 4.0, pz+30);
+  sun.position.set(px+10,30,pz+6);
+
+  // Infinite mountain ridge — recycle peaks that fall behind
+  for(const m of mountains){ if(m.position.z < pz-150) m.position.z += MTN_RANGE; }
 
   const t=Date.now()*.003;
   collectibles.forEach(c=>{
@@ -1050,7 +1118,7 @@ function animate(){
   // HUD
   const sc=String(Math.floor(dist*12)).padStart(6,'0');
   document.getElementById('score').textContent=sc;
-  document.getElementById('lenses').textContent='🦕 LENS × '+lensCount;
+  document.getElementById('lenses').textContent='👓 メガネ × '+lensCount;
   document.getElementById('spd').textContent='SPD '+Math.floor(speed).toString().padStart(3,'0');
 
   renderer.render(scene,camera);
