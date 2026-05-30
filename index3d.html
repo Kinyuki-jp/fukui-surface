@@ -271,6 +271,39 @@ body.camshake{animation:camshake .12s linear infinite}
   background:linear-gradient(90deg,transparent,rgba(0,255,255,.3) 25%,rgba(0,255,255,.3) 75%,transparent);
   pointer-events:none;z-index:59;
 }
+
+/* ════════════════════════════════════════════════════════
+   PHOTOREAL UI PASS (direction B) — strip the cyber/neon look.
+   Placed last so it overrides the rules above by cascade.
+   ════════════════════════════════════════════════════════ */
+body, #score, #lenses, #spd, #gtitle, #gsub, #overlay, #overlay h1, #banner{
+  font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif !important;
+}
+/* Hide the overt cyber overlays */
+#scanlines, #speedlines, #gridoverlay, #scanpulse, #hudline{ display:none !important; }
+/* Softer cinematic vignette instead of the heavy cyber one */
+#vignette{ background:radial-gradient(ellipse at center,transparent 62%,rgba(0,0,0,.28) 100%) !important; }
+/* Naturalise the neon HUD into clean, legible daylight text */
+#score{
+  color:#ffffff !important; font-weight:800 !important; letter-spacing:1px !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.45),0 2px 10px rgba(0,0,0,.35) !important;
+}
+#lenses{
+  color:#ffe6a0 !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.5) !important;
+}
+#spd{
+  color:#eaf6ff !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.5) !important;
+}
+#gtitle{
+  color:#ffffff !important;
+  text-shadow:0 2px 6px rgba(0,0,0,.5) !important;
+}
+#gsub{
+  color:#dfeefc !important;
+  text-shadow:0 1px 3px rgba(0,0,0,.5) !important;
+}
 </style>
 </head>
 <body>
@@ -382,6 +415,10 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
+// Photoreal colour pipeline: sRGB output + filmic tone-mapping for natural daylight
+renderer.outputEncoding   = THREE.sRGBEncoding;
+renderer.toneMapping       = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.1, 600);
@@ -393,14 +430,15 @@ addEventListener('resize', ()=>{
   camera.updateProjectionMatrix();
 });
 
-const ambient  = new THREE.AmbientLight(0xffffff, 0.95);
+const ambient  = new THREE.AmbientLight(0xffffff, 0.42);
 scene.add(ambient);
-const sun = new THREE.DirectionalLight(0xfff0d0, 2.1);
+const sun = new THREE.DirectionalLight(0xfff2da, 2.75);
 sun.castShadow = true;
 Object.assign(sun.shadow.camera,{near:.1,far:140,left:-30,right:30,top:30,bottom:-30});
-sun.shadow.mapSize.set(1024,1024);
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.bias = -0.0004;
 scene.add(sun);
-const hemi = new THREE.HemisphereLight(0xbfe3ff, 0x4a6a3a, 0.85);
+const hemi = new THREE.HemisphereLight(0xbfe3ff, 0x55402c, 0.5);
 scene.add(hemi);
 
 // ═══════════════════════════════════════════
@@ -416,14 +454,33 @@ const M = {
   obsOrange:  new THREE.MeshLambertMaterial({color:0xff7700}),
   lens:       new THREE.MeshLambertMaterial({color:0x00ffee,emissive:0x005544}),
   shadow:     new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.3}),
-  lane:       new THREE.MeshBasicMaterial({color:0x00ffff,transparent:true,opacity:.1}),
+  lane:       new THREE.MeshBasicMaterial({color:0xf2ecd8,transparent:true,opacity:.16}),
 };
 let trackMat = new THREE.MeshLambertMaterial({color:0x7a7060});
 let wallMat  = new THREE.MeshLambertMaterial({color:0x504838});
 let bldMat   = new THREE.MeshLambertMaterial({color:0x304028});
 
+// Vertical gradient sky (zenith → horizon) baked to a CanvasTexture — far more natural than a flat fill
+let _skyTex = null;
+function makeSkyGradient(topHex, botHex){
+  const cv = document.createElement('canvas'); cv.width = 8; cv.height = 256;
+  const cx = cv.getContext('2d');
+  const top = new THREE.Color(topHex), bot = new THREE.Color(botHex);
+  const g = cx.createLinearGradient(0,0,0,256);
+  g.addColorStop(0.0, '#'+top.getHexString());
+  g.addColorStop(0.62,'#'+top.clone().lerp(bot,0.55).getHexString());
+  g.addColorStop(1.0, '#'+bot.getHexString());
+  cx.fillStyle = g; cx.fillRect(0,0,8,256);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.encoding = THREE.sRGBEncoding;
+  tex.minFilter = THREE.LinearFilter;
+  return tex;
+}
+
 function applyStage(st){
-  scene.background = new THREE.Color(st.sky);
+  if(_skyTex) _skyTex.dispose();
+  _skyTex = makeSkyGradient(st.sky, st.fog);
+  scene.background = _skyTex;
   scene.fog        = new THREE.FogExp2(st.fog, 0.0038); // light haze so mountains show
   trackMat.color.setHex(st.track);
   wallMat.color.setHex(st.wall);
@@ -744,6 +801,30 @@ const fernMat =new THREE.MeshLambertMaterial({color:0x1e7a14});
 const wtrMat  =new THREE.MeshBasicMaterial({color:0x70b8ff,transparent:true,opacity:.55,side:THREE.DoubleSide});
 const stoneMat=new THREE.MeshLambertMaterial({color:0x7a7060});
 const crkMat  =new THREE.MeshBasicMaterial({color:0x2a2018});
+// Procedural weathered-concrete texture for the road — seamlessly tileable (wrap-copied blotches)
+function makeStoneTexture(){
+  const s=256, cv=document.createElement('canvas'); cv.width=cv.height=s;
+  const cx=cv.getContext('2d');
+  cx.fillStyle='#8c8372'; cx.fillRect(0,0,s,s);
+  for(let i=0;i<70;i++){
+    const x=Math.random()*s, y=Math.random()*s, r=7+Math.random()*28;
+    const col = Math.random()<0.5 ? 'rgba(124,116,100,0.17)' : 'rgba(66,60,50,0.15)';
+    for(let dx=-s;dx<=s;dx+=s) for(let dy=-s;dy<=s;dy+=s){
+      cx.fillStyle=col; cx.beginPath(); cx.arc(x+dx,y+dy,r,0,6.2832); cx.fill();
+    }
+  }
+  const img=cx.getImageData(0,0,s,s), d=img.data;
+  for(let p=0;p<d.length;p+=4){ const n=(Math.random()-0.5)*20; d[p]+=n; d[p+1]+=n; d[p+2]+=n; }
+  cx.putImageData(img,0,0);
+  const tex=new THREE.CanvasTexture(cv);
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.repeat.set(2,6);            // 6 = integer ⇒ tiles seamlessly across 32-unit segments
+  tex.encoding=THREE.sRGBEncoding;
+  tex.anisotropy=4;
+  return tex;
+}
+stoneMat.map = makeStoneTexture();
+stoneMat.color.setHex(0xffffff); // let the texture carry the tone
 // ツツジ (azalea) flower palette — reused so segments don't leak materials
 const azaleaMats=[0xff4d8d,0xff79b0,0xe83a7a,0xffffff,0xcc4df0,0xff2e88].map(c=>{
   const m=new THREE.MeshLambertMaterial({color:c,emissive:c,flatShading:true});
