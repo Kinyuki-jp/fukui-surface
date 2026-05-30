@@ -1,0 +1,44 @@
+name: Deploy to GitHub Pages
+
+# master へ push されるたびに、GitHub Pages を自動で有効化してサイトを公開する。
+# （リポジトリ設定を手動で触らなくても、このワークフローが Pages を立ち上げる）
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# 公開 (Pages) に必要な権限を、このワークフローに明示的に付与する
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時実行を1つに絞り、古いデプロイはキャンセル
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages (auto-enable)
+        uses: actions/configure-pages@v4
+        with:
+          enablement: true
+
+      - name: Upload site (repo root)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
